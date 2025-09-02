@@ -22,7 +22,6 @@ license = "Apache-2.0"
 license-files = [ "LICENSE" ]
 requires-python = ">=3.10"
 dependencies = [
-    "fastkml>=1.1.0",
     "fiona>=1.10.1",
     "osmium>=4.1.1",
     "shapely>=2.1.1",

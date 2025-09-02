@@ -25,7 +25,7 @@ plugins:
           label: Input files
           description: >
             List of geospatial file configurations. Each entry must be an object with:
-            - paths: path to the file (SHP, GeoJSON, OSM, KML, GPKG, ZIP with SHP inside)
+            - paths: path to the file (SHP, GeoJSON, OSM, GPKG)
             - table_name: (optional) custom table name override
             - skip_fields: (optional) array of field names to exclude
             - primary_keys: (optional) array of field names for primary keys
@@ -37,7 +37,7 @@ plugins:
           label: File path patterns
           description: >
             List of glob expressions that expand to dataset files
-            (supports SHP, GeoJSON, OSM, KML, GPKG, or zipped SHP).
+            (supports SHP, GeoJSON, OSM, GPKG).
             Example: ["data/**/*.shp", "data/*.geojson"]
 
         - name: files[].table_name
