@@ -60,6 +60,7 @@ addopts = [
 
 [tool.mypy]
 warn_unused_configs = true
+disable_error_code = ["import-untyped"]
 
 [tool.ruff.lint]
 ignore = [
@@ -101,7 +102,7 @@ pass_env = [
     "GITHUB_*",
     "TAP_GEO_*",
 ]
-dependency_groups = [ "test" ]
+dependency_groups = [ "test", "typing" ]
 commands = [ [ "pytest", { replace = "posargs", default = [ "tests" ], extend = true } ] ]
 
 [tool.tox.env.typing]

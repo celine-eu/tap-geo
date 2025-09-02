@@ -14,7 +14,7 @@ from .osm import OSMHandler
 
 if t.TYPE_CHECKING:
     from singer_sdk.helpers.types import Context
-    from singer_sdk.tap_base import TapBase
+    from singer_sdk.tap_base import Tap
 
 
 def fiona_type_to_jsonschema(fiona_type: str) -> dict:
@@ -44,7 +44,7 @@ def fiona_type_to_jsonschema(fiona_type: str) -> dict:
 class GeoStream(Stream):
     """Stream for geospatial files (SHP, GeoJSON, OSM, GPX, etc.)."""
 
-    def __init__(self, tap: TapBase, file_cfg: dict) -> None:
+    def __init__(self, tap: Tap, file_cfg: dict) -> None:
         self.file_cfg = file_cfg
         self.filepath = Path(file_cfg["path"])
         table_name = file_cfg.get("table_name") or self.filepath.stem
