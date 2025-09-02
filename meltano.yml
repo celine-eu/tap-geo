@@ -74,36 +74,31 @@ plugins:
       # TODO: Declare default configuration values here:
       config:
         files:
-          # - paths:
-          #     - ./data/stazioni.shp
-          #   # skip_fields: ["unnecessary_field"]
-          #   primary_keys: ["id"]
-          #   geometry_format: "wkt"
-          #   table_name: shp
-          # - paths:
-          #     - "data/test.osm"
-          #   # skip_fields: ["unnecessary_field"]
-          #   primary_keys: ["id"]
-          #   geometry_format: "wkt"
-          #   table_name: osm
-          # - paths:
-          #     - "data/test.geojson"
-          #   # skip_fields: ["unnecessary_field"]
-          #   primary_keys: ["id"]
-          #   geometry_format: "wkt"
-          #   table_name: geojson
-          # - paths:
-          #     - "data/test.gpx"
-          #   # skip_fields: ["unnecessary_field"]
-          #   primary_keys: ["id"]
-          #   geometry_format: "wkt"
-          #   table_name: gpx
           - paths:
-              - "data/test.kml"
+              - ./data/stazioni.shp
             # skip_fields: ["unnecessary_field"]
             primary_keys: ["id"]
             geometry_format: "wkt"
-            table_name: kml
+            table_name: shp
+          - paths:
+              - "data/test.osm"
+            # skip_fields: ["unnecessary_field"]
+            primary_keys: ["id"]
+            geometry_format: "wkt"
+            table_name: osm
+          - paths:
+              - "data/test.geojson"
+            # skip_fields: ["unnecessary_field"]
+            primary_keys: ["id"]
+            geometry_format: "wkt"
+            table_name: geojson
+          - paths:
+              - "data/test.gpx"
+            # skip_fields: ["unnecessary_field"]
+            primary_keys: ["id"]
+            geometry_format: "wkt"
+            table_name: gpx
+
   loaders:
     - name: target-jsonl
       variant: andyh1203
