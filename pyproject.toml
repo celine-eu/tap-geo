@@ -1,0 +1,110 @@
+[project]
+name = "tap-geo"
+version = "0.0.1"
+description = "Singer tap for Geo, built with the Meltano Singer SDK."
+readme = "README.md"
+authors = [{ name = "Luca Capra", email = "luca.capra@spindox.it" }]
+keywords = [
+    "ELT",
+    "Geo",
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
+license = "Apache-2.0"
+license-files = [ "LICENSE" ]
+requires-python = ">=3.10"
+dependencies = [
+    "fastkml>=1.1.0",
+    "fiona>=1.10.1",
+    "osmium>=4.1.1",
+    "shapely>=2.1.1",
+    "singer-sdk~=0.48.1",
+]
+
+[project.optional-dependencies]
+s3 = [
+    "s3fs~=2025.7.0",
+]
+
+[project.scripts]
+# CLI declaration
+tap-geo = 'tap_geo.tap:TapGeo.cli'
+
+[dependency-groups]
+dev = [
+    { include-group = "test" },
+    "meltano>=3.9.1",
+    "pytest>=8.4.1",
+]
+test = [
+    "pytest>=8",
+    "pytest-github-actions-annotate-failures>=0.3",
+    "singer-sdk[testing]",
+]
+typing = [
+    "mypy>=1.16.0",
+    "types-requests",
+]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--durations=10",
+]
+
+[tool.mypy]
+warn_unused_configs = true
+
+[tool.ruff.lint]
+ignore = [
+    "COM812",  # missing-trailing-comma
+]
+select = ["ALL"]
+
+[tool.ruff.lint.flake8-annotations]
+allow-star-arg-any = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[build-system]
+requires = [
+    "hatchling>=1,<2",
+]
+build-backend = "hatchling.build"
+
+# This configuration can be used to customize tox tests as well as other test frameworks like flake8 and mypy
+[tool.tox]
+min_version = "4.22"
+requires = [
+    "tox>=4.22",
+    "tox-uv",
+]
+env_list = [
+    "typing",
+    "py314",
+    "py313",
+    "py312",
+    "py311",
+    "py310",
+]
+
+[tool.tox.env_run_base]
+runner = "uv-venv-lock-runner"
+pass_env = [
+    "GITHUB_*",
+    "TAP_GEO_*",
+]
+dependency_groups = [ "test" ]
+commands = [ [ "pytest", { replace = "posargs", default = [ "tests" ], extend = true } ] ]
+
+[tool.tox.env.typing]
+dependency_groups = [ "test", "typing" ]
+commands = [ [ "mypy", { replace = "posargs", default = [ "tap_geo", "tests" ], extend = true } ] ]

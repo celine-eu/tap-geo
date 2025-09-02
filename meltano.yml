@@ -1,0 +1,110 @@
+version: 1
+send_anonymous_usage_stats: true
+project_id: "tap-geo"
+default_environment: test
+venv:
+  backend: uv
+environments:
+  - name: test
+plugins:
+  extractors:
+    - name: "tap-geo"
+      namespace: "tap_geo"
+      pip_url: -e .
+      capabilities:
+        - state
+        - catalog
+        - discover
+        - about
+        - stream-maps
+
+      # Settings schema (so Meltano UI/CLI can guide users)
+      settings:
+        - name: files
+          kind: array
+          label: Input files
+          description: >
+            List of geospatial file configurations. Each entry must be an object with:
+            - paths: path to the file (SHP, GeoJSON, OSM, KML, GPKG, ZIP with SHP inside)
+            - table_name: (optional) custom table name override
+            - skip_fields: (optional) array of field names to exclude
+            - primary_keys: (optional) array of field names for primary keys
+            - geometry_format: (optional) "wkt" (default) or "geojson"
+          value: []
+
+        - name: files[].paths
+          kind: array
+          label: File path patterns
+          description: >
+            List of glob expressions that expand to dataset files
+            (supports SHP, GeoJSON, OSM, KML, GPKG, or zipped SHP).
+            Example: ["data/**/*.shp", "data/*.geojson"]
+
+        - name: files[].table_name
+          kind: string
+          label: Table name
+          description: Optional table name override; defaults to the file name without extension.
+
+        - name: files[].skip_fields
+          kind: array
+          label: Skip fields
+          description: List of field names to exclude from records.
+          value: []
+
+        - name: files[].primary_keys
+          kind: array
+          label: Primary keys
+          description: Fields to use as primary key(s).
+          value: []
+
+        - name: files[].geometry_format
+          kind: string
+          label: Geometry format
+          description: 'Geometry output format: "wkt" or "geojson".'
+          value: wkt
+          options:
+            - label: Well-Known Text (WKT)
+              value: wkt
+            - label: GeoJSON object
+              value: geojson
+
+      settings_group_validation:
+        - ["files", "files[].paths"]
+
+      # TODO: Declare default configuration values here:
+      config:
+        files:
+          # - paths:
+          #     - ./data/stazioni.shp
+          #   # skip_fields: ["unnecessary_field"]
+          #   primary_keys: ["id"]
+          #   geometry_format: "wkt"
+          #   table_name: shp
+          # - paths:
+          #     - "data/test.osm"
+          #   # skip_fields: ["unnecessary_field"]
+          #   primary_keys: ["id"]
+          #   geometry_format: "wkt"
+          #   table_name: osm
+          # - paths:
+          #     - "data/test.geojson"
+          #   # skip_fields: ["unnecessary_field"]
+          #   primary_keys: ["id"]
+          #   geometry_format: "wkt"
+          #   table_name: geojson
+          # - paths:
+          #     - "data/test.gpx"
+          #   # skip_fields: ["unnecessary_field"]
+          #   primary_keys: ["id"]
+          #   geometry_format: "wkt"
+          #   table_name: gpx
+          - paths:
+              - "data/test.kml"
+            # skip_fields: ["unnecessary_field"]
+            primary_keys: ["id"]
+            geometry_format: "wkt"
+            table_name: kml
+  loaders:
+    - name: target-jsonl
+      variant: andyh1203
+      pip_url: target-jsonl
