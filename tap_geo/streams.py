@@ -147,7 +147,7 @@ class GeoStream(Stream):
                 yield {
                     **rec,
                     "metadata": {
-                        **rec.get("tags", {}),
+                        "tags": rec.get("tags", {}),
                         "source": str(self.filepath),
                     },
                 }
