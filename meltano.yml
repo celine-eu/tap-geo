@@ -57,6 +57,12 @@ plugins:
           description: Fields to use as primary key(s).
           value: []
 
+        - name: files[].expose_fields
+          kind: array
+          label: Expose columns
+          description: Expose features as column
+          value: []
+
         - name: files[].geometry_format
           kind: string
           label: Geometry format

@@ -84,6 +84,7 @@ config:
         - "data/shapes/**/*.shp"
       table_name: shapes
       skip_fields: ["temp_field"]
+      expose_fields: ["col_name", "col_2"]
       geometry_format: "geojson"
 
     - paths:
