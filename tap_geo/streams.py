@@ -66,6 +66,7 @@ class GeoStream(Stream):
                     "geometry": {"type": ["null", "string", "object"]},
                     "tags": {"type": ["null", "object"]},
                     "members": {"type": ["null", "array"]},
+                    "metadata": {"type": ["null", "object"]},
                 },
             }
 
