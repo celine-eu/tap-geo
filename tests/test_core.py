@@ -35,6 +35,7 @@ def test_geo_stream_schema_and_records(filename):
     for rec in records:
         assert "geometry" in rec
         assert "metadata" in rec
+        assert "properties" in rec
 
 
 def test_tapgeo_discovers_streams():

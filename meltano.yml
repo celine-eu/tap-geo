@@ -96,7 +96,7 @@ plugins:
               - "data/test.gpx"
             # skip_fields: ["unnecessary_field"]
             primary_keys: ["id"]
-            geometry_format: "wkt"
+            geometry_format: "geojson"
             table_name: gpx
 
   loaders:
