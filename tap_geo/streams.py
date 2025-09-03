@@ -39,41 +39,36 @@ class GeoStream(Stream):
     def schema(self) -> dict:
         """Build schema from file metadata."""
 
-        props = {
+        base_props = {
             "id": {"type": ["null", "string"]},
             "geometry": {"type": ["null", "string", "object"]},
             "features": {"type": ["null", "object"]},
             "metadata": {"type": ["null", "object"]},
         }
 
-        extras = {}
-        for field in self.expose_fields:
-            extras[field] = {"type": ["null", "string"]}
+        extras = {f: {"type": ["null", "string"]} for f in self.expose_fields}
 
         suffix = self.filepath.suffix.lower()
         if suffix in (".osm", ".pbf"):
             return {
                 "type": "object",
                 "properties": {
-                    "id": {"type": ["string"]},
                     **extras,
-                    "type": {"type": ["string"]},
+                    "id": {"type": ["null", "string"]},
+                    "type": {"type": ["null", "string"]},
                     "members": {"type": ["null", "array"]},
-                    **props,
+                    **base_props,
                 },
             }
 
         try:
-            with fiona.open(self.filepath) as src:
+            with fiona.open(self.filepath):
                 pass
         except Exception as e:
             self.logger.error("Failed to open %s with Fiona: %s", self.filepath, e)
             raise
 
-        return {
-            "type": "object",
-            "properties": {**extras, **props},
-        }
+        return {"type": "object", "properties": {**extras, **base_props}}
 
     def get_records(self, context: Context | None) -> t.Iterable[dict]:
         """Route file parsing depending on extension."""
