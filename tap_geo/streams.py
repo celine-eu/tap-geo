@@ -3,7 +3,6 @@
 from __future__ import annotations
 import typing as t
 from pathlib import Path
-import json
 import fiona
 from shapely.geometry import shape, mapping
 from shapely.wkt import dumps as to_wkt
@@ -62,9 +61,8 @@ class GeoStream(Stream):
                 "type": "object",
                 "properties": {
                     "id": {"type": ["string"]},
-                    "type": {"type": ["string"]},  # node, way, relation
+                    "type": {"type": ["string"]},
                     "geometry": {"type": ["null", "string", "object"]},
-                    "tags": {"type": ["null", "string"]},
                     "members": {"type": ["null", "array"]},
                     "metadata": {"type": ["null", "object"]},
                 },
@@ -148,8 +146,8 @@ class GeoStream(Stream):
             for rec in handler.records:
                 yield {
                     **rec,
-                    "tags": json.dumps(rec.get("tags", {})),  # force to string
                     "metadata": {
+                        **rec.get("tags", {}),
                         "source": str(self.filepath),
                     },
                 }
