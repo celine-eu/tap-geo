@@ -30,6 +30,13 @@ class TapGeo(Tap):
                         default="wkt",
                         description="Geometry format: wkt or geojson",
                     ),
+                    th.Property(
+                        "expose_fields",
+                        th.ArrayType(th.StringType),
+                        default=[],
+                        description="List of feature properties to expose as top-level columns. "
+                        "All other properties will go into `features`.",
+                    ),
                 )
             ),
             required=True,

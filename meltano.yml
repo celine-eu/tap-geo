@@ -80,22 +80,24 @@ plugins:
             primary_keys: ["nome", "tratta"]
             geometry_format: "wkt"
             table_name: shp
+
           - paths:
               - "data/test.osm"
             # skip_fields: ["unnecessary_field"]
             primary_keys: ["id"]
             geometry_format: "wkt"
             table_name: osm
+
           - paths:
               - "data/test.geojson"
-            # skip_fields: ["unnecessary_field"]
             primary_keys: ["id"]
+            expose_fields: [amenity, name]
             geometry_format: "wkt"
             table_name: geojson
+
           - paths:
               - "data/test.gpx"
-            # skip_fields: ["unnecessary_field"]
-            primary_keys: ["id"]
+            primary_keys: ["link1_href"]
             geometry_format: "geojson"
             table_name: gpx
 

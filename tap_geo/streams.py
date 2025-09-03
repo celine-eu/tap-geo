@@ -23,25 +23,43 @@ class GeoStream(Stream):
         self.file_cfg = file_cfg
         self.filepath = Path(file_cfg["path"])
         table_name = file_cfg.get("table_name") or self.filepath.stem
+
         self.primary_keys = file_cfg.get("primary_keys", [])
+        self.expose_fields: list[str] = file_cfg.get("expose_fields", [])
+
+        # ensure pks are also exposed as columns
+        for pk in self.primary_keys:
+            if pk not in self.expose_fields:
+                self.expose_fields.append(pk)
+
         self.tap = tap
         super().__init__(tap, name=table_name)
 
     @property
     def schema(self) -> dict:
         """Build schema from file metadata."""
-        suffix = self.filepath.suffix.lower()
 
+        props = {
+            "id": {"type": ["null", "string"]},
+            "geometry": {"type": ["null", "string", "object"]},
+            "features": {"type": ["null", "object"]},
+            "metadata": {"type": ["null", "object"]},
+        }
+
+        extras = {}
+        for field in self.expose_fields:
+            extras[field] = {"type": ["null", "string"]}
+
+        suffix = self.filepath.suffix.lower()
         if suffix in (".osm", ".pbf"):
             return {
                 "type": "object",
                 "properties": {
                     "id": {"type": ["string"]},
+                    **extras,
                     "type": {"type": ["string"]},
-                    "geometry": {"type": ["null", "string", "object"]},
-                    "properties": {"type": ["null", "object"]},
                     "members": {"type": ["null", "array"]},
-                    "metadata": {"type": ["null", "object"]},
+                    **props,
                 },
             }
 
@@ -54,12 +72,7 @@ class GeoStream(Stream):
 
         return {
             "type": "object",
-            "properties": {
-                "id": {"type": ["null", "string"]},
-                "geometry": {"type": ["null", "string", "object"]},
-                "properties": {"type": ["null", "string", "object"]},
-                "metadata": {"type": ["null", "object"]},
-            },
+            "properties": {**extras, **props},
         }
 
     def get_records(self, context: Context | None) -> t.Iterable[dict]:
@@ -87,12 +100,18 @@ class GeoStream(Stream):
                 driver = src.driver
                 for i, feat in enumerate(src, start=1):
                     try:
-                        # everything in properties → metadata
                         props = {
                             k: v
                             for k, v in feat["properties"].items()
                             if k not in skip_fields
                         }
+
+                        exposed = {
+                            k: props.pop(k)
+                            for k in list(self.expose_fields)
+                            if k in props
+                        }
+
                         geom = None
                         if feat.get("geometry"):
                             if geom_fmt == "wkt":
@@ -100,27 +119,24 @@ class GeoStream(Stream):
                             elif geom_fmt == "geojson":
                                 geom = mapping(shape(feat["geometry"]))
 
-                        id_value = props.get("id", props.get("@id", None))
-
-                        # fallback: composite key from configured primary keys
-
-                        if self.file_cfg.get("primary_keys", []):
+                        id_value = exposed.get("id", None)
+                        if self.file_cfg.get("primary_keys", None):
                             try:
                                 id_value = "_".join(
-                                    str(props.get(k))
+                                    str(exposed.get(k) or props.get(k))
                                     for k in self.file_cfg.get("primary_keys", [])
-                                    if props.get(k) is not None
+                                    if (exposed.get(k) or props.get(k)) is not None
                                 )
                             except Exception as e:
                                 self.logger.warning(
                                     "Failed to build ID from primary keys: %s", e
                                 )
-                                id_value = None
 
                         yield {
+                            **exposed,
                             "id": id_value,
                             "geometry": geom,
-                            "properties": props,
+                            "features": props,
                             "metadata": {
                                 "source": str(self.filepath),
                                 "driver": driver,
@@ -141,16 +157,22 @@ class GeoStream(Stream):
             handler = OSMHandler(geom_fmt)
             handler.apply_file(str(self.filepath))
             for rec in handler.records:
-                # move tags & members into metadata
                 metadata = {
                     "source": str(self.filepath),
-                    "members": rec.pop("members", None),
                 }
+
+                tags = rec.pop("tags", {}) or {}
+                exposed = {
+                    k: tags.pop(k) for k in list(self.expose_fields) if k in tags
+                }
+
                 yield {
+                    **exposed,
                     "id": rec.get("id") or rec.get("@id"),
                     "type": rec.get("type"),
+                    "members": rec.pop("members", None),
                     "geometry": rec.get("geometry"),
-                    "properties": rec.pop("tags", None),
+                    "features": tags,
                     "metadata": metadata,
                 }
         except Exception as e:
