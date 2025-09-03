@@ -77,7 +77,7 @@ plugins:
           - paths:
               - ./data/stazioni.shp
             # skip_fields: ["unnecessary_field"]
-            primary_keys: ["id"]
+            primary_keys: ["nome", "tratta"]
             geometry_format: "wkt"
             table_name: shp
           - paths:
