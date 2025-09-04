@@ -3,7 +3,7 @@ import pytest
 from tap_geo.tap import TapGeo
 from tap_geo.streams import GeoStream
 
-BASE = os.path.join("data")
+BASE = "data"
 
 
 @pytest.mark.parametrize(
@@ -17,8 +17,10 @@ BASE = os.path.join("data")
 def test_geo_stream_schema_and_records(filename):
     """Ensure schema can be built and at least one record is parsed."""
     filepath = os.path.join(BASE, filename)
-    cfg = {"path": filepath}
-    tap = TapGeo(config={"files": [{"paths": [filepath]}]})
+
+    # Config must pass a list of paths
+    cfg = {"paths": [filepath]}
+    tap = TapGeo(config={"files": [cfg]})
 
     stream = GeoStream(tap, cfg)
 
@@ -31,7 +33,7 @@ def test_geo_stream_schema_and_records(filename):
     assert isinstance(records, list)
     assert len(records) > 0
 
-    # All records must have geometry + metadata
+    # All records must have geometry + metadata + features
     for rec in records:
         assert "geometry" in rec
         assert "metadata" in rec
@@ -47,7 +49,10 @@ def test_tapgeo_discovers_streams():
     ]
     tap = TapGeo(config={"files": files})
     streams = tap.discover_streams()
+
+    # One stream per config entry
     assert len(streams) == len(files)
+
     for stream in streams:
         assert isinstance(stream, GeoStream)
         # Ensure schema and at least one record per stream
