@@ -47,10 +47,13 @@ class TapGeo(Tap):
     def discover_streams(self):
         streams = []
         for file_cfg in self.config["files"]:
+            all_paths = []
             for pattern in file_cfg["paths"]:
-                for path in glob.glob(pattern, recursive=True):
-                    cfg = {**file_cfg, "path": path}
-                    streams.append(GeoStream(self, cfg))
+                all_paths.extend(glob.glob(pattern, recursive=True))
+
+            # collapse into one config
+            cfg = {**file_cfg, "paths": all_paths}
+            streams.append(GeoStream(self, cfg))
         return streams
 
 
