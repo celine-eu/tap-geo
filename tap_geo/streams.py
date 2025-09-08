@@ -21,9 +21,6 @@ class GeoStream(Stream):
 
     def __init__(self, tap: Tap, file_cfg: dict) -> None:
 
-        table_name = file_cfg.get("table_name") or self.filepaths[0].stem
-        super().__init__(tap, name=table_name)
-
         self.file_cfg = file_cfg
         # expand config to handle multiple files
         self.filepaths = [Path(p) for p in file_cfg.get("paths", [])]
@@ -31,6 +28,9 @@ class GeoStream(Stream):
             raise ValueError(
                 "GeoStream requires at least one path in file_cfg['paths']."
             )
+
+        table_name = file_cfg.get("table_name") or self.filepaths[0].stem
+        super().__init__(tap, name=table_name)
 
         self.primary_keys: list[str] = [
             p.lower() for p in file_cfg.get("primary_keys", [])
