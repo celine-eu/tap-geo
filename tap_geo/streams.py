@@ -17,7 +17,7 @@ if t.TYPE_CHECKING:
     from singer_sdk.helpers.types import Context
     from singer_sdk.tap_base import Tap
 
-__INCREMENTAL_KEY = "updated_at"
+__INCREMENTAL_KEY = "__updated_at"
 
 
 class GeoStream(Stream):
@@ -132,15 +132,17 @@ class GeoStream(Stream):
             suffix = filepath.suffix.lower()
             try:
                 if suffix in (".osm", ".pbf"):
-                    yield from self._parse_osm(filepath, geom_fmt)
+                    yield from self._parse_osm(filepath, geom_fmt, mtime)
                 else:
-                    yield from self._parse_with_fiona(filepath, skip_fields, geom_fmt)
+                    yield from self._parse_with_fiona(
+                        filepath, skip_fields, geom_fmt, mtime
+                    )
             except Exception as e:
                 self.logger.exception("Failed parsing file %s: %s", filepath, e)
                 raise
 
     def _parse_with_fiona(
-        self, filepath: Path, skip_fields: set[str], geom_fmt: str
+        self, filepath: Path, skip_fields: set[str], geom_fmt: str, mtime: datetime
     ) -> t.Iterable[dict]:
         """Parse SHP, GeoJSON, GPKG via Fiona."""
         try:
@@ -179,6 +181,7 @@ class GeoStream(Stream):
                                 "driver": driver,
                                 "crs": crs,
                             },
+                            __INCREMENTAL_KEY: mtime,
                         }
                     except Exception as fe:
                         self.logger.warning(
@@ -188,7 +191,9 @@ class GeoStream(Stream):
             self.logger.error("Could not open dataset %s: %s", filepath, e)
             raise
 
-    def _parse_osm(self, filepath: Path, geom_fmt: str) -> t.Iterable[dict]:
+    def _parse_osm(
+        self, filepath: Path, geom_fmt: str, mtime: datetime
+    ) -> t.Iterable[dict]:
         """Parse OSM XML/PBF using pyosmium."""
         try:
             handler = OSMHandler(geom_fmt)
@@ -210,6 +215,7 @@ class GeoStream(Stream):
                     "geometry": rec.get("geometry"),
                     "features": tags,
                     "metadata": metadata,
+                    __INCREMENTAL_KEY: mtime,
                 }
         except Exception as e:
             self.logger.error("OSM parsing failed for %s: %s", filepath, e)
