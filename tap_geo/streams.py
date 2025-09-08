@@ -17,7 +17,7 @@ if t.TYPE_CHECKING:
     from singer_sdk.helpers.types import Context
     from singer_sdk.tap_base import Tap
 
-__INCREMENTAL_KEY = "__updated_at"
+INCREMENTAL_KEY = "__updated_at"
 
 
 class GeoStream(Stream):
@@ -37,7 +37,7 @@ class GeoStream(Stream):
         super().__init__(tap, name=table_name)
 
         self.state_partitioning_keys = ["filename"]
-        self.replication_key = __INCREMENTAL_KEY
+        self.replication_key = INCREMENTAL_KEY
         self.forced_replication_method = "INCREMENTAL"
 
         self.primary_keys: list[str] = [
@@ -71,7 +71,7 @@ class GeoStream(Stream):
             for f in self.expose_fields
         }
 
-        extras[__INCREMENTAL_KEY] = th.Property(
+        extras[INCREMENTAL_KEY] = th.Property(
             str(self.replication_key),
             th.DateTimeType(nullable=True),
             description="Replication checkpoint (file mtime or row date)",
@@ -181,7 +181,7 @@ class GeoStream(Stream):
                                 "driver": driver,
                                 "crs": crs,
                             },
-                            __INCREMENTAL_KEY: mtime,
+                            INCREMENTAL_KEY: mtime,
                         }
                     except Exception as fe:
                         self.logger.warning(
@@ -215,7 +215,7 @@ class GeoStream(Stream):
                     "geometry": rec.get("geometry"),
                     "features": tags,
                     "metadata": metadata,
-                    __INCREMENTAL_KEY: mtime,
+                    INCREMENTAL_KEY: mtime,
                 }
         except Exception as e:
             self.logger.error("OSM parsing failed for %s: %s", filepath, e)
