@@ -20,6 +20,10 @@ class GeoStream(Stream):
     """Stream for geospatial files (SHP, GeoJSON, OSM, GPX, etc.)."""
 
     def __init__(self, tap: Tap, file_cfg: dict) -> None:
+
+        table_name = file_cfg.get("table_name") or self.filepaths[0].stem
+        super().__init__(tap, name=table_name)
+
         self.file_cfg = file_cfg
         # expand config to handle multiple files
         self.filepaths = [Path(p) for p in file_cfg.get("paths", [])]
@@ -28,10 +32,16 @@ class GeoStream(Stream):
                 "GeoStream requires at least one path in file_cfg['paths']."
             )
 
-        table_name = file_cfg.get("table_name") or self.filepaths[0].stem
+        self.primary_keys: list[str] = [
+            p.lower() for p in file_cfg.get("primary_keys", [])
+        ]
 
-        self.primary_keys = file_cfg.get("primary_keys", [])
-        self.expose_fields: list[str] = file_cfg.get("expose_fields", [])
+        self.core_fields = ["geometry", "features", "metadata"]
+        self.expose_fields: list[str] = [
+            p.lower()
+            for p in file_cfg.get("expose_fields", [])
+            if not p.lower() in self.core_fields
+        ]
 
         # ensure PKs are exposed
         for pk in self.primary_keys:
@@ -39,7 +49,6 @@ class GeoStream(Stream):
                 self.expose_fields.append(pk)
 
         self.tap = tap
-        super().__init__(tap, name=table_name)
 
     @property
     def schema(self) -> dict:
@@ -50,7 +59,7 @@ class GeoStream(Stream):
             "metadata": {"type": ["null", "object"]},
         }
         extras = {
-            f: {"type": ["null", "string", "number", "object"]}
+            f.lower(): {"type": ["null", "string", "number", "object"]}
             for f in self.expose_fields
         }
 
@@ -102,16 +111,21 @@ class GeoStream(Stream):
                 driver = src.driver
                 for i, feat in enumerate(src, start=1):
                     try:
+
                         props = {
                             k: v
                             for k, v in feat["properties"].items()
                             if k not in skip_fields
                         }
+                        props_map = {k.lower(): k for k in props}
+
                         exposed = {
-                            k: props.pop(k)
+                            k.lower(): props.pop(props_map[k.lower()])
                             for k in list(self.expose_fields)
-                            if k in props
+                            if k.lower() in props_map
+                            and k.lower() not in self.core_fields
                         }
+
                         geom = None
                         if feat.get("geometry"):
                             if geom_fmt == "wkt":
@@ -145,7 +159,10 @@ class GeoStream(Stream):
                 metadata = {"source": str(filepath)}
                 tags = rec.pop("tags", {}) or {}
                 exposed = {
-                    k: tags.pop(k) for k in list(self.expose_fields) if k in tags
+                    k.lower(): tags.pop(k)
+                    for k in list(self.expose_fields)
+                    if k in tags
+                    and k.lower() not in [*self.core_fields, "id", "type", "members"]
                 }
                 yield {
                     **exposed,
