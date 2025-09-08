@@ -127,7 +127,7 @@ class GeoStream(Stream):
                     mtime,
                     bookmark_dt,
                 )
-                return []
+                yield from []
 
             suffix = filepath.suffix.lower()
             try:
