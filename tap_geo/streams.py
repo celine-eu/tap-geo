@@ -8,12 +8,16 @@ import fiona
 from shapely.geometry import shape, mapping
 from shapely.wkt import dumps as to_wkt
 from singer_sdk.streams import Stream
-
+from singer_sdk import typing as th
+import os
+from datetime import datetime, timezone
 from .osm import OSMHandler
 
 if t.TYPE_CHECKING:
     from singer_sdk.helpers.types import Context
     from singer_sdk.tap_base import Tap
+
+__INCREMENTAL_KEY = "updated_at"
 
 
 class GeoStream(Stream):
@@ -31,6 +35,10 @@ class GeoStream(Stream):
 
         table_name = file_cfg.get("table_name") or self.filepaths[0].stem
         super().__init__(tap, name=table_name)
+
+        self.state_partitioning_keys = ["filename"]
+        self.replication_key = __INCREMENTAL_KEY
+        self.forced_replication_method = "INCREMENTAL"
 
         self.primary_keys: list[str] = [
             p.lower() for p in file_cfg.get("primary_keys", [])
@@ -63,6 +71,12 @@ class GeoStream(Stream):
             for f in self.expose_fields
         }
 
+        extras[__INCREMENTAL_KEY] = th.Property(
+            str(self.replication_key),
+            th.DateTimeType(nullable=True),
+            description="Replication checkpoint (file mtime or row date)",
+        ).to_dict()
+
         suffix = self.filepaths[0].suffix.lower()
         if suffix in (".osm", ".pbf"):
             return {
@@ -91,6 +105,30 @@ class GeoStream(Stream):
         geom_fmt = self.tap.config.get("geometry_format", "wkt")
 
         for filepath in self.filepaths:
+
+            partition_context = {"filename": os.path.basename(filepath)}
+            last_bookmark = self.get_starting_replication_key_value(partition_context)
+
+            bookmark_dt: datetime | None = None
+            if last_bookmark:
+                bookmark_dt = datetime.fromisoformat(last_bookmark)
+                if bookmark_dt.tzinfo is None:
+                    bookmark_dt = bookmark_dt.replace(tzinfo=timezone.utc)
+                else:
+                    bookmark_dt = bookmark_dt.astimezone(timezone.utc)
+
+            mtime = datetime.fromtimestamp(os.path.getmtime(filepath), tz=timezone.utc)
+
+            # skip file entirely if mtime <= bookmark
+            if bookmark_dt and mtime <= bookmark_dt:
+                self.logger.info(
+                    "Skipping %s (mtime=%s <= bookmark=%s)",
+                    filepath,
+                    mtime,
+                    bookmark_dt,
+                )
+                return []
+
             suffix = filepath.suffix.lower()
             try:
                 if suffix in (".osm", ".pbf"):
