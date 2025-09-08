@@ -61,35 +61,53 @@ class GeoStream(Stream):
     @property
     def schema(self) -> dict:
         """Build schema once, based on the first file."""
-        base_props = {
-            "geometry": {"type": ["null", "string", "object"]},
-            "features": {"type": ["null", "object"]},
-            "metadata": {"type": ["null", "object"]},
-        }
-        extras = {
-            f.lower(): {"type": ["null", "string", "number", "object"]}
-            for f in self.expose_fields
-        }
 
-        extras[INCREMENTAL_KEY] = th.Property(
-            str(self.replication_key),
-            th.DateTimeType(nullable=True),
-            description="Replication checkpoint (file mtime or row date)",
-        ).to_dict()
+        # --- Base props shared across formats
+        base_props = [
+            th.Property(
+                "geometry", th.CustomType({"type": ["null", "string", "object"]})
+            ),
+            th.Property(
+                "features", th.ObjectType(additional_properties=True, nullable=True)
+            ),
+            th.Property(
+                "metadata", th.ObjectType(additional_properties=True, nullable=True)
+            ),
+        ]
+
+        # --- Dynamically exposed fields
+        extras = [
+            th.Property(
+                f.lower(),
+                th.CustomType({"type": ["null", "string", "number", "object"]}),
+            )
+            for f in self.expose_fields
+        ]
+
+        # --- Replication key checkpoint
+        extras.append(
+            th.Property(
+                str(self.replication_key),
+                th.DateTimeType(nullable=True),
+                description="Replication checkpoint (file mtime or row date)",
+            )
+        )
 
         suffix = self.filepaths[0].suffix.lower()
-        if suffix in (".osm", ".pbf"):
-            return {
-                "type": "object",
-                "properties": {
-                    **extras,
-                    "id": {"type": ["null", "string", "number"]},
-                    "type": {"type": ["null", "string"]},
-                    "members": {"type": ["null", "array"]},
-                    **base_props,
-                },
-            }
 
+        if suffix in (".osm", ".pbf"):
+            osm_props = [
+                th.Property(
+                    "id", th.CustomType({"type": ["null", "string", "number"]})
+                ),
+                th.Property("type", th.StringType(nullable=True)),
+                th.Property(
+                    "members", th.ArrayType(th.CustomType({"type": ["null", "object"]}))
+                ),
+            ]
+            return th.PropertiesList(*extras, *osm_props, *base_props).to_dict()
+
+        # --- Ensure Fiona can open (non-OSM formats)
         try:
             with fiona.open(self.filepaths[0]):
                 pass
@@ -97,7 +115,7 @@ class GeoStream(Stream):
             self.logger.error("Failed to open %s with Fiona: %s", self.filepaths[0], e)
             raise
 
-        return {"type": "object", "properties": {**extras, **base_props}}
+        return th.PropertiesList(*extras, *base_props).to_dict()
 
     def get_records(self, context: Context | None) -> t.Iterable[dict]:
         """Iterate through all files in this stream config."""
