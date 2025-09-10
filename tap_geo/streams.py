@@ -17,7 +17,8 @@ if t.TYPE_CHECKING:
     from singer_sdk.helpers.types import Context
     from singer_sdk.tap_base import Tap
 
-INCREMENTAL_KEY = "__updated_at"
+SDC_INCREMENTAL_KEY = "_sdc_last_modified"
+SDC_FILENAME = "_sdc_filename"
 
 
 class GeoStream(Stream):
@@ -36,8 +37,8 @@ class GeoStream(Stream):
         table_name = file_cfg.get("table_name") or self.filepaths[0].stem
         super().__init__(tap, name=table_name)
 
-        self.state_partitioning_keys = ["filename"]
-        self.replication_key = INCREMENTAL_KEY
+        self.state_partitioning_keys = [SDC_FILENAME]
+        self.replication_key = SDC_INCREMENTAL_KEY
         self.forced_replication_method = "INCREMENTAL"
 
         self.primary_keys: list[str] = [
@@ -73,6 +74,16 @@ class GeoStream(Stream):
             th.Property(
                 "metadata", th.ObjectType(additional_properties=True, nullable=True)
             ),
+            th.Property(
+                SDC_INCREMENTAL_KEY,
+                th.DateTimeType(nullable=True),
+                description="Replication checkpoint (file mtime)",
+            ),
+            th.Property(
+                SDC_FILENAME,
+                th.StringType(nullable=True),
+                description="Replication filename reference",
+            ),
         ]
 
         # --- Dynamically exposed fields
@@ -84,15 +95,6 @@ class GeoStream(Stream):
             for f in self.expose_fields
         ]
 
-        # --- Replication key checkpoint
-        extras.append(
-            th.Property(
-                str(self.replication_key),
-                th.DateTimeType(nullable=True),
-                description="Replication checkpoint (file mtime or row date)",
-            )
-        )
-
         suffix = self.filepaths[0].suffix.lower()
 
         if suffix in (".osm", ".pbf"):
@@ -102,10 +104,11 @@ class GeoStream(Stream):
                 ),
                 th.Property("type", th.StringType(nullable=True)),
                 th.Property(
-                    "members", th.ArrayType(th.CustomType({"type": ["null", "object"]}))
+                    "members", th.ArrayType(th.ObjectType(additional_properties=True))
                 ),
             ]
-            return th.PropertiesList(*extras, *osm_props, *base_props).to_dict()
+            osm_schema = th.PropertiesList(*extras, *osm_props, *base_props).to_dict()
+            return osm_schema
 
         # --- Ensure Fiona can open (non-OSM formats)
         try:
@@ -145,16 +148,25 @@ class GeoStream(Stream):
                     mtime,
                     bookmark_dt,
                 )
-                yield from []
+                continue
 
             suffix = filepath.suffix.lower()
             try:
+
                 if suffix in (".osm", ".pbf"):
                     yield from self._parse_osm(filepath, geom_fmt, mtime)
                 else:
                     yield from self._parse_with_fiona(
                         filepath, skip_fields, geom_fmt, mtime
                     )
+
+                # track last file update
+                partition_context = {"filename": filepath.name}
+                self._increment_stream_state(
+                    {SDC_INCREMENTAL_KEY: mtime.isoformat()},
+                    context=partition_context,
+                )
+
             except Exception as e:
                 self.logger.exception("Failed parsing file %s: %s", filepath, e)
                 raise
@@ -190,6 +202,7 @@ class GeoStream(Stream):
                                 geom = to_wkt(shape(feat["geometry"]))
                             elif geom_fmt == "geojson":
                                 geom = mapping(shape(feat["geometry"]))
+
                         yield {
                             **exposed,
                             "geometry": geom,
@@ -199,7 +212,8 @@ class GeoStream(Stream):
                                 "driver": driver,
                                 "crs": crs,
                             },
-                            INCREMENTAL_KEY: mtime,
+                            SDC_INCREMENTAL_KEY: mtime,
+                            SDC_FILENAME: os.path.basename(filepath),
                         }
                     except Exception as fe:
                         self.logger.warning(
@@ -225,7 +239,8 @@ class GeoStream(Stream):
                     if k in tags
                     and k.lower() not in [*self.core_fields, "id", "type", "members"]
                 }
-                yield {
+
+                record = {
                     **exposed,
                     "id": rec.get("id") or rec.get("@id"),
                     "type": rec.get("type"),
@@ -233,8 +248,11 @@ class GeoStream(Stream):
                     "geometry": rec.get("geometry"),
                     "features": tags,
                     "metadata": metadata,
-                    INCREMENTAL_KEY: mtime,
+                    SDC_INCREMENTAL_KEY: mtime,
+                    SDC_FILENAME: os.path.basename(filepath),
                 }
+
+                yield record
         except Exception as e:
             self.logger.error("OSM parsing failed for %s: %s", filepath, e)
             raise
