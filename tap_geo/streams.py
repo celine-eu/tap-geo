@@ -103,13 +103,16 @@ class GeoStream(Stream):
     def schema(self) -> dict:
         """Build schema once, based on the first accessible file."""
         test_path = None
+        storage = None
+
         for st in self.storages:
             files = st.glob()
             if files:
                 test_path = files[0]
                 storage = st
                 break
-        if not test_path:
+
+        if not test_path or not storage:
             raise FileNotFoundError("No files found for GeoStream schema detection")
 
         suffix = Path(test_path).suffix.lower()
