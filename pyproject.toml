@@ -22,8 +22,10 @@ license = "Apache-2.0"
 license-files = [ "LICENSE" ]
 requires-python = ">=3.10"
 dependencies = [
+    "boto3>=1.39.11",
     "fiona>=1.10.1",
     "osmium>=4.1.1",
+    "s3fs>=2025.9.0",
     "shapely>=2.1.1",
     "singer-sdk~=0.48.1",
 ]
@@ -42,6 +44,7 @@ dev = [
     { include-group = "test" },
     "meltano>=3.9.1",
     "pytest>=8.4.1",
+    "python-semantic-release>=10.4.1",
 ]
 test = [
     "pytest>=8",
@@ -102,9 +105,26 @@ pass_env = [
     "GITHUB_*",
     "TAP_GEO_*",
 ]
-dependency_groups = [ "test", "typing" ]
+dependency_groups = [ "test", "typing", "dev" ]
 commands = [ [ "pytest", { replace = "posargs", default = [ "tests" ], extend = true } ] ]
 
 [tool.tox.env.typing]
-dependency_groups = [ "test", "typing" ]
+dependency_groups = [ "test", "typing", "dev" ]
 commands = [ [ "mypy", { replace = "posargs", default = [ "tap_geo", "tests" ], extend = true } ] ]
+
+[[tool.mypy.overrides]]
+module = ["boto3.*", "moto.*"]
+ignore_missing_imports = true
+
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+update_pyproject_toml = true 
+commit_parser = "conventional"
+
+[tool.semantic_release.commit_parser_options]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+parse_squash_commits = true
+ignore_merge_commits = true
+
