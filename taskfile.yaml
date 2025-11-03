@@ -1,0 +1,9 @@
+version: "3"
+
+tasks:
+  release:
+    cmds:
+      # - uv lock --upgrade-package mqtt-ingestor
+      - uv run semantic-release -v version --no-vcs-release
+      - git push
+      - git push --tags

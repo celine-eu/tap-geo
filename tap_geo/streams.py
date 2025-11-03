@@ -1,7 +1,10 @@
-"""GeoStream base logic for geospatial file parsing."""
+"""GeoStream base logic for geospatial file parsing, with storage abstraction."""
 
 from __future__ import annotations
 import typing as t
+import tempfile
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 import fiona
@@ -9,9 +12,9 @@ from shapely.geometry import shape, mapping
 from shapely.wkt import dumps as to_wkt
 from singer_sdk.streams import Stream
 from singer_sdk import typing as th
-import os
-from datetime import datetime, timezone
+
 from .osm import OSMHandler
+from .storage import Storage, FileInfo
 
 if t.TYPE_CHECKING:
     from singer_sdk.helpers.types import Context
@@ -22,20 +25,18 @@ SDC_FILENAME = "_sdc_filename"
 
 
 class GeoStream(Stream):
-    """Stream for geospatial files (SHP, GeoJSON, OSM, GPX, etc.)."""
+    """Stream for geospatial files (SHP, GeoJSON, OSM, GPX, etc.) supporting fsspec storage."""
 
     def __init__(self, tap: Tap, file_cfg: dict) -> None:
-
         self.file_cfg = file_cfg
-        # expand config to handle multiple files
-        self.filepaths = [Path(p) for p in file_cfg.get("paths", [])]
-        if not self.filepaths:
+        self.path_patterns = file_cfg.get("paths", [])
+        if not self.path_patterns:
             raise ValueError(
                 "GeoStream requires at least one path in file_cfg['paths']."
             )
 
-        table_name = file_cfg.get("table_name") or self.filepaths[0].stem
-        super().__init__(tap, name=table_name)
+        self.table_name = file_cfg.get("table_name") or Path(self.path_patterns[0]).stem
+        super().__init__(tap, name=self.table_name)
 
         self.state_partitioning_keys = [SDC_FILENAME]
         self.replication_key = SDC_INCREMENTAL_KEY
@@ -49,21 +50,32 @@ class GeoStream(Stream):
         self.expose_fields: list[str] = [
             p.lower()
             for p in file_cfg.get("expose_fields", [])
-            if not p.lower() in self.core_fields
+            if p.lower() not in self.core_fields
         ]
-
-        # ensure PKs are exposed
         for pk in self.primary_keys:
             if pk not in self.expose_fields:
                 self.expose_fields.append(pk)
 
         self.tap = tap
 
+        # Storage abstraction for all path patterns
+        self.storages = [Storage(pat) for pat in self.path_patterns]
+
     @property
     def schema(self) -> dict:
-        """Build schema once, based on the first file."""
+        """Build schema once, based on the first accessible file."""
+        first_files = []
+        for st in self.storages:
+            found = st.glob()
+            if found:
+                first_files.append(found[0])
+                break
+        if not first_files:
+            raise FileNotFoundError("No files found for GeoStream schema detection")
 
-        # --- Base props shared across formats
+        test_path = first_files[0]
+        suffix = Path(test_path).suffix.lower()
+
         base_props = [
             th.Property(
                 "geometry", th.CustomType({"type": ["null", "string", "object"]})
@@ -74,28 +86,15 @@ class GeoStream(Stream):
             th.Property(
                 "metadata", th.ObjectType(additional_properties=True, nullable=True)
             ),
-            th.Property(
-                SDC_INCREMENTAL_KEY,
-                th.DateTimeType(nullable=True),
-                description="Replication checkpoint (file mtime)",
-            ),
-            th.Property(
-                SDC_FILENAME,
-                th.StringType(nullable=True),
-                description="Replication filename reference",
-            ),
+            th.Property(SDC_INCREMENTAL_KEY, th.DateTimeType(nullable=True)),
+            th.Property(SDC_FILENAME, th.StringType(nullable=True)),
         ]
-
-        # --- Dynamically exposed fields
         extras = [
             th.Property(
-                f.lower(),
-                th.CustomType({"type": ["null", "string", "number", "object"]}),
+                f, th.CustomType({"type": ["null", "string", "number", "object"]})
             )
             for f in self.expose_fields
         ]
-
-        suffix = self.filepaths[0].suffix.lower()
 
         if suffix in (".osm", ".pbf"):
             osm_props = [
@@ -107,152 +106,149 @@ class GeoStream(Stream):
                     "members", th.ArrayType(th.ObjectType(additional_properties=True))
                 ),
             ]
-            osm_schema = th.PropertiesList(*extras, *osm_props, *base_props).to_dict()
-            return osm_schema
+            return th.PropertiesList(*extras, *osm_props, *base_props).to_dict()
 
-        # --- Ensure Fiona can open (non-OSM formats)
-        try:
-            with fiona.open(self.filepaths[0]):
+        # Try opening with Fiona (using temp file if remote)
+        st = self.storages[0]
+        with (
+            st.open(test_path, "rb") as fh,
+            tempfile.NamedTemporaryFile(suffix=suffix) as tmp,
+        ):
+            tmp.write(fh.read())
+            tmp.flush()
+            with fiona.open(tmp.name):
                 pass
-        except Exception as e:
-            self.logger.error("Failed to open %s with Fiona: %s", self.filepaths[0], e)
-            raise
 
         return th.PropertiesList(*extras, *base_props).to_dict()
 
     def get_records(self, context: Context | None) -> t.Iterable[dict]:
-        """Iterate through all files in this stream config."""
+        """Iterate through all files in configured storages."""
         skip_fields = set(self.tap.config.get("skip_fields", []))
         geom_fmt = self.tap.config.get("geometry_format", "wkt")
 
-        for filepath in self.filepaths:
+        for st in self.storages:
+            for path in st.glob():
+                info: FileInfo = st.describe(path)
 
-            partition_context = {"filename": os.path.basename(filepath)}
-            last_bookmark = self.get_starting_replication_key_value(partition_context)
-
-            bookmark_dt: datetime | None = None
-            if last_bookmark:
-                bookmark_dt = datetime.fromisoformat(last_bookmark)
-                if bookmark_dt.tzinfo is None:
-                    bookmark_dt = bookmark_dt.replace(tzinfo=timezone.utc)
-                else:
-                    bookmark_dt = bookmark_dt.astimezone(timezone.utc)
-
-            mtime = datetime.fromtimestamp(os.path.getmtime(filepath), tz=timezone.utc)
-
-            # skip file entirely if mtime <= bookmark
-            if bookmark_dt and mtime <= bookmark_dt:
-                self.logger.info(
-                    "Skipping %s (mtime=%s <= bookmark=%s)",
-                    filepath,
-                    mtime,
-                    bookmark_dt,
+                partition_context = {SDC_FILENAME: os.path.basename(info.path)}
+                last_bookmark = self.get_starting_replication_key_value(
+                    partition_context
                 )
-                continue
+                bookmark_dt = None
+                if last_bookmark:
+                    bookmark_dt = datetime.fromisoformat(last_bookmark)
+                    if bookmark_dt.tzinfo is None:
+                        bookmark_dt = bookmark_dt.replace(tzinfo=timezone.utc)
 
-            suffix = filepath.suffix.lower()
-            try:
-
-                if suffix in (".osm", ".pbf"):
-                    yield from self._parse_osm(filepath, geom_fmt, mtime)
-                else:
-                    yield from self._parse_with_fiona(
-                        filepath, skip_fields, geom_fmt, mtime
+                if bookmark_dt and info.mtime <= bookmark_dt:
+                    self.logger.info(
+                        "Skipping %s (mtime=%s <= bookmark=%s)",
+                        info.path,
+                        info.mtime,
+                        bookmark_dt,
                     )
+                    continue
 
-                # track last file update
-                partition_context = {"filename": filepath.name}
-                self._increment_stream_state(
-                    {SDC_INCREMENTAL_KEY: mtime.isoformat()},
-                    context=partition_context,
-                )
+                suffix = Path(info.path).suffix.lower()
+                try:
+                    if suffix in (".osm", ".pbf"):
+                        yield from self._parse_osm(st, info.path, geom_fmt, info.mtime)
+                    else:
+                        yield from self._parse_with_fiona(
+                            st, info.path, skip_fields, geom_fmt, info.mtime
+                        )
 
-            except Exception as e:
-                self.logger.exception("Failed parsing file %s: %s", filepath, e)
-                raise
+                    self._increment_stream_state(
+                        {SDC_INCREMENTAL_KEY: info.mtime.isoformat()},
+                        context=partition_context,
+                    )
+                except Exception as e:
+                    self.logger.exception("Failed parsing file %s: %s", info.path, e)
+                    raise
 
     def _parse_with_fiona(
-        self, filepath: Path, skip_fields: set[str], geom_fmt: str, mtime: datetime
+        self,
+        st: Storage,
+        path: str,
+        skip_fields: set[str],
+        geom_fmt: str,
+        mtime: datetime,
     ) -> t.Iterable[dict]:
-        """Parse SHP, GeoJSON, GPKG via Fiona."""
-        try:
-            with fiona.open(filepath) as src:
+        """Parse SHP, GeoJSON, GPKG via Fiona (temp file if remote)."""
+        suffix = Path(path).suffix
+        with (
+            st.open(path, "rb") as fh,
+            tempfile.NamedTemporaryFile(suffix=suffix) as tmp,
+        ):
+            tmp.write(fh.read())
+            tmp.flush()
+            with fiona.open(tmp.name) as src:
                 crs = src.crs_wkt or src.crs
                 driver = src.driver
-                for i, feat in enumerate(src, start=1):
-                    try:
+                for feat in src:
+                    props = {
+                        k: v
+                        for k, v in feat["properties"].items()
+                        if k not in skip_fields
+                    }
+                    props_map = {k.lower(): k for k in props}
+                    exposed = {
+                        k.lower(): props.pop(props_map[k.lower()])
+                        for k in self.expose_fields
+                        if k.lower() in props_map and k.lower() not in self.core_fields
+                    }
 
-                        props = {
-                            k: v
-                            for k, v in feat["properties"].items()
-                            if k not in skip_fields
-                        }
-                        props_map = {k.lower(): k for k in props}
-
-                        exposed = {
-                            k.lower(): props.pop(props_map[k.lower()])
-                            for k in list(self.expose_fields)
-                            if k.lower() in props_map
-                            and k.lower() not in self.core_fields
-                        }
-
-                        geom = None
-                        if feat.get("geometry"):
-                            if geom_fmt == "wkt":
-                                geom = to_wkt(shape(feat["geometry"]))
-                            elif geom_fmt == "geojson":
-                                geom = mapping(shape(feat["geometry"]))
-
-                        yield {
-                            **exposed,
-                            "geometry": geom,
-                            "features": props,
-                            "metadata": {
-                                "source": str(filepath),
-                                "driver": driver,
-                                "crs": crs,
-                            },
-                            SDC_INCREMENTAL_KEY: mtime,
-                            SDC_FILENAME: os.path.basename(filepath),
-                        }
-                    except Exception as fe:
-                        self.logger.warning(
-                            "Failed to parse feature %d in %s: %s", i, filepath, fe
+                    geom = None
+                    if feat.get("geometry"):
+                        geom = (
+                            to_wkt(shape(feat["geometry"]))
+                            if geom_fmt == "wkt"
+                            else mapping(shape(feat["geometry"]))
                         )
-        except Exception as e:
-            self.logger.error("Could not open dataset %s: %s", filepath, e)
-            raise
+
+                    yield {
+                        **exposed,
+                        "geometry": geom,
+                        "features": props,
+                        "metadata": {"source": path, "driver": driver, "crs": crs},
+                        SDC_INCREMENTAL_KEY: mtime,
+                        SDC_FILENAME: os.path.basename(path),
+                    }
 
     def _parse_osm(
-        self, filepath: Path, geom_fmt: str, mtime: datetime
+        self,
+        st: Storage,
+        path: str,
+        geom_fmt: str,
+        mtime: datetime,
     ) -> t.Iterable[dict]:
-        """Parse OSM XML/PBF using pyosmium."""
-        try:
+        """Parse OSM XML or PBF via pyosmium (temp file if remote)."""
+        suffix = Path(path).suffix
+        with (
+            st.open(path, "rb") as fh,
+            tempfile.NamedTemporaryFile(suffix=suffix) as tmp,
+        ):
+            tmp.write(fh.read())
+            tmp.flush()
             handler = OSMHandler(geom_fmt)
-            handler.apply_file(str(filepath))
+            handler.apply_file(tmp.name)
             for rec in handler.records:
-                metadata = {"source": str(filepath)}
+                metadata = {"source": path}
                 tags = rec.pop("tags", {}) or {}
                 exposed = {
                     k.lower(): tags.pop(k)
-                    for k in list(self.expose_fields)
+                    for k in self.expose_fields
                     if k in tags
                     and k.lower() not in [*self.core_fields, "id", "type", "members"]
                 }
-
-                record = {
+                yield {
                     **exposed,
-                    "id": rec.get("id") or rec.get("@id"),
+                    "id": rec.get("id"),
                     "type": rec.get("type"),
                     "members": rec.pop("members", None),
                     "geometry": rec.get("geometry"),
                     "features": tags,
                     "metadata": metadata,
                     SDC_INCREMENTAL_KEY: mtime,
-                    SDC_FILENAME: os.path.basename(filepath),
+                    SDC_FILENAME: os.path.basename(path),
                 }
-
-                yield record
-        except Exception as e:
-            self.logger.error("OSM parsing failed for %s: %s", filepath, e)
-            raise

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from singer_sdk import Tap, typing as th
-import glob
 
 from tap_geo.streams import GeoStream
+from tap_geo.storage import Storage
 
 
 class TapGeo(Tap):
@@ -49,9 +49,8 @@ class TapGeo(Tap):
         for file_cfg in self.config["files"]:
             all_paths = []
             for pattern in file_cfg["paths"]:
-                all_paths.extend(glob.glob(pattern, recursive=True))
-
-            # collapse into one config
+                st = Storage(pattern)
+                all_paths.extend(st.glob())
             cfg = {**file_cfg, "paths": all_paths}
             streams.append(GeoStream(self, cfg))
         return streams
