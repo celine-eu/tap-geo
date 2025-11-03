@@ -27,7 +27,7 @@ dependencies = [
     "osmium>=4.1.1",
     "s3fs>=2025.9.0",
     "shapely>=2.1.1",
-    "singer-sdk~=0.48.1",
+    "singer-sdk~=0.49.1",
 ]
 
 [project.optional-dependencies]
