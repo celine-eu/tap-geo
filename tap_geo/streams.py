@@ -1,4 +1,4 @@
-"""GeoStream base logic for geospatial file parsing, with storage abstraction."""
+"""GeoStream base logic for geospatial file parsing, with storage abstraction and shapefile support."""
 
 from __future__ import annotations
 import typing as t
@@ -6,6 +6,7 @@ import tempfile
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from contextlib import contextmanager
 
 import fiona
 from shapely.geometry import shape, mapping
@@ -57,23 +58,60 @@ class GeoStream(Stream):
                 self.expose_fields.append(pk)
 
         self.tap = tap
-
-        # Storage abstraction for all path patterns
         self.storages = [Storage(pat) for pat in self.path_patterns]
 
+    # ------------------------------
+    # Utility: staged file provider
+    # ------------------------------
+    @contextmanager
+    def staged_local_file(self, st: Storage, path: str) -> t.Generator[str, None, None]:
+        """
+        Yield a local path usable by Fiona, downloading remote files if needed.
+        - For local files → yields directly.
+        - For remote shapefiles → downloads .shp + .shx + .dbf + .prj + .cpg.
+        - For remote single files → downloads one file.
+        """
+        if os.path.exists(path):  # Local filesystem, no need to copy
+            yield path
+            return
+
+        suffix = Path(path).suffix.lower()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            if suffix == ".shp":
+                base = os.path.splitext(path)[0]
+                for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
+                    candidate = base + ext
+                    try:
+                        with (
+                            st.open(candidate, "rb") as fh,
+                            open(Path(tmpdir) / Path(candidate).name, "wb") as out,
+                        ):
+                            out.write(fh.read())
+                    except Exception:
+                        continue
+                yield str(Path(tmpdir) / Path(path).name)
+            else:
+                local_path = Path(tmpdir) / Path(path).name
+                with st.open(path, "rb") as fh, open(local_path, "wb") as out:
+                    out.write(fh.read())
+                yield str(local_path)
+
+    # ------------------------------
+    # Schema generation
+    # ------------------------------
     @property
     def schema(self) -> dict:
         """Build schema once, based on the first accessible file."""
-        first_files = []
+        test_path = None
         for st in self.storages:
-            found = st.glob()
-            if found:
-                first_files.append(found[0])
+            files = st.glob()
+            if files:
+                test_path = files[0]
+                storage = st
                 break
-        if not first_files:
+        if not test_path:
             raise FileNotFoundError("No files found for GeoStream schema detection")
 
-        test_path = first_files[0]
         suffix = Path(test_path).suffix.lower()
 
         base_props = [
@@ -108,19 +146,16 @@ class GeoStream(Stream):
             ]
             return th.PropertiesList(*extras, *osm_props, *base_props).to_dict()
 
-        # Try opening with Fiona (using temp file if remote)
-        st = self.storages[0]
-        with (
-            st.open(test_path, "rb") as fh,
-            tempfile.NamedTemporaryFile(suffix=suffix) as tmp,
-        ):
-            tmp.write(fh.read())
-            tmp.flush()
-            with fiona.open(tmp.name):
+        # Try opening via Fiona (using local or staged copy)
+        with self.staged_local_file(storage, test_path) as local_file:
+            with fiona.open(local_file):
                 pass
 
         return th.PropertiesList(*extras, *base_props).to_dict()
 
+    # ------------------------------
+    # Record iteration
+    # ------------------------------
     def get_records(self, context: Context | None) -> t.Iterable[dict]:
         """Iterate through all files in configured storages."""
         skip_fields = set(self.tap.config.get("skip_fields", []))
@@ -166,6 +201,9 @@ class GeoStream(Stream):
                     self.logger.exception("Failed parsing file %s: %s", info.path, e)
                     raise
 
+    # ------------------------------
+    # Parsing logic
+    # ------------------------------
     def _parse_with_fiona(
         self,
         st: Storage,
@@ -174,15 +212,9 @@ class GeoStream(Stream):
         geom_fmt: str,
         mtime: datetime,
     ) -> t.Iterable[dict]:
-        """Parse SHP, GeoJSON, GPKG via Fiona (temp file if remote)."""
-        suffix = Path(path).suffix
-        with (
-            st.open(path, "rb") as fh,
-            tempfile.NamedTemporaryFile(suffix=suffix) as tmp,
-        ):
-            tmp.write(fh.read())
-            tmp.flush()
-            with fiona.open(tmp.name) as src:
+        """Parse SHP, GeoJSON, GPKG via Fiona, staging remote datasets if needed."""
+        with self.staged_local_file(st, path) as local_file:
+            with fiona.open(local_file) as src:
                 crs = src.crs_wkt or src.crs
                 driver = src.driver
                 for feat in src:
@@ -223,15 +255,9 @@ class GeoStream(Stream):
         mtime: datetime,
     ) -> t.Iterable[dict]:
         """Parse OSM XML or PBF via pyosmium (temp file if remote)."""
-        suffix = Path(path).suffix
-        with (
-            st.open(path, "rb") as fh,
-            tempfile.NamedTemporaryFile(suffix=suffix) as tmp,
-        ):
-            tmp.write(fh.read())
-            tmp.flush()
+        with self.staged_local_file(st, path) as local_file:
             handler = OSMHandler(geom_fmt)
-            handler.apply_file(tmp.name)
+            handler.apply_file(local_file)
             for rec in handler.records:
                 metadata = {"source": path}
                 tags = rec.pop("tags", {}) or {}

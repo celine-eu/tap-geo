@@ -91,7 +91,25 @@ config:
         - "data/buildings.geojson"
       table_name: buildings
       primary_keys: ["building_id"]
+
+    # e.g. use docker compose up to test locally
+    - paths:
+        - "s3://local-data/buildings.geojson"
+      table_name: buildings
+      primary_keys: ["building_id"]
 ```
+
+
+To use an S3-based storage ensure to provide those envirnoment variables: 
+
+- `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` access key/secret pair
+- `S3_ENDPOINT_URL` Custom S3 endpoint such as minio or compatible interface
+
+Example:
+
+`S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin S3_ENDPOINT_URL=http://localhost:19000 meltano run tap-geo target-jsonl`
+
+
 
 
 ### Configure using environment variables
