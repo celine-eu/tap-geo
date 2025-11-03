@@ -110,6 +110,7 @@ commands = [ [ "pytest", { replace = "posargs", default = [ "tests" ], extend = 
 
 [tool.tox.env.typing]
 dependency_groups = [ "test", "typing", "dev" ]
+set_env = { GDAL_VERSION = "3.8.5" }
 commands = [ [ "mypy", { replace = "posargs", default = [ "tap_geo", "tests" ], extend = true } ] ]
 
 [[tool.mypy.overrides]]
