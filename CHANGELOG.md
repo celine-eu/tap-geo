@@ -19,6 +19,12 @@
 - Set GDAL_VERSION
   ([`248c33c`](https://github.com/celine-eu/tap-geo/commit/248c33cd3a3fa88b823275b6668a1f49f5796c2e))
 
+- Update pkg
+  ([`753a95e`](https://github.com/celine-eu/tap-geo/commit/753a95e9e2a6b2a67a8b4b7288b3663f1d075686))
+
+- Update pkg
+  ([`d7ae628`](https://github.com/celine-eu/tap-geo/commit/d7ae628ab1dc04d6c19753536a2248948bcbce9f))
+
 - Use py3.12 for fiona build
   ([`8dbdeea`](https://github.com/celine-eu/tap-geo/commit/8dbdeeaefd2b6aba243a24d7be9b955c4dcd5572))
 
