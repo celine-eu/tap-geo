@@ -137,10 +137,11 @@ class GeoStream(Stream):
             if k in (SDC_INCREMENTAL_KEY, SDC_FILENAME):
                 continue
 
+            tpe: t.Any
             # --- Explicit type detection order (list first)
             if isinstance(v, list):
                 # Infer element type if possible
-                elem_type = None
+                elem_type: t.Any | None = None
                 for elem in v:
                     if elem is None:
                         continue
