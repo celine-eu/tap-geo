@@ -1,21 +1,24 @@
-"""GeoStream base logic for geospatial file parsing, with storage abstraction and shapefile support."""
+"""GeoStream base logic for geospatial file parsing (SHP, GeoJSON, GPX, OSM/PBF) with storage abstraction."""
 
 from __future__ import annotations
 import typing as t
 import tempfile
 import os
+import json
 from datetime import datetime, timezone
 from pathlib import Path
-from contextlib import contextmanager
 
-import fiona
-from shapely.geometry import shape, mapping
+import shapely.geometry
 from shapely.wkt import dumps as to_wkt
+import shapefile  # pyshp
+import gpxpy
+
 from singer_sdk.streams import Stream
 from singer_sdk import typing as th
 
-from .osm import OSMHandler
 from .storage import Storage, FileInfo
+from .osm import OSMHandler
+from contextlib import contextmanager
 
 if t.TYPE_CHECKING:
     from singer_sdk.helpers.types import Context
@@ -26,7 +29,7 @@ SDC_FILENAME = "_sdc_filename"
 
 
 class GeoStream(Stream):
-    """Stream for geospatial files (SHP, GeoJSON, OSM, GPX, etc.) supporting fsspec storage."""
+    """Stream for geospatial files (SHP, GeoJSON, GPX, OSM/PBF) supporting fsspec storage."""
 
     def __init__(self, tap: Tap, file_cfg: dict) -> None:
         self.file_cfg = file_cfg
@@ -60,23 +63,20 @@ class GeoStream(Stream):
         self.tap = tap
         self.storages = [Storage(pat) for pat in self.path_patterns]
 
-    # ------------------------------
-    # Utility: staged file provider
-    # ------------------------------
+    # -------------------------------------------------------------------------
+    # Utility: staged local file for remote handling
+    # -------------------------------------------------------------------------
     @contextmanager
-    def staged_local_file(self, st: Storage, path: str) -> t.Generator[str, None, None]:
-        """
-        Yield a local path usable by Fiona, downloading remote files if needed.
-        - For local files → yields directly.
-        - For remote shapefiles → downloads .shp + .shx + .dbf + .prj + .cpg.
-        - For remote single files → downloads one file.
-        """
-        if os.path.exists(path):  # Local filesystem, no need to copy
+    def _staged_local_file(self, st: Storage, path: str):
+        """Yield a local filesystem path; downloads to temp dir if remote."""
+        if os.path.exists(path):
             yield path
             return
 
         suffix = Path(path).suffix.lower()
         with tempfile.TemporaryDirectory() as tmpdir:
+            local_path = Path(tmpdir) / Path(path).name
+
             if suffix == ".shp":
                 base = os.path.splitext(path)[0]
                 for ext in [".shp", ".shx", ".dbf", ".prj", ".cpg"]:
@@ -89,76 +89,109 @@ class GeoStream(Stream):
                             out.write(fh.read())
                     except Exception:
                         continue
-                yield str(Path(tmpdir) / Path(path).name)
             else:
-                local_path = Path(tmpdir) / Path(path).name
                 with st.open(path, "rb") as fh, open(local_path, "wb") as out:
                     out.write(fh.read())
-                yield str(local_path)
 
-    # ------------------------------
-    # Schema generation
-    # ------------------------------
+            yield str(local_path)
+
+    # -------------------------------------------------------------------------
+    # Schema building (aligned with parsing)
+    # -------------------------------------------------------------------------
     @property
     def schema(self) -> dict:
-        """Build schema once, based on the first accessible file."""
+        """Infer schema from the first available file by introspection."""
         test_path = None
         storage = None
-
         for st in self.storages:
             files = st.glob()
             if files:
                 test_path = files[0]
                 storage = st
                 break
-
         if not test_path or not storage:
             raise FileNotFoundError("No files found for GeoStream schema detection")
 
         suffix = Path(test_path).suffix.lower()
 
-        base_props = [
-            th.Property(
-                "geometry", th.CustomType({"type": ["null", "string", "object"]})
-            ),
-            th.Property(
-                "features", th.ObjectType(additional_properties=True, nullable=True)
-            ),
-            th.Property(
-                "metadata", th.ObjectType(additional_properties=True, nullable=True)
-            ),
-            th.Property(SDC_INCREMENTAL_KEY, th.DateTimeType(nullable=True)),
-            th.Property(SDC_FILENAME, th.StringType(nullable=True)),
-        ]
-        extras = [
-            th.Property(
-                f, th.CustomType({"type": ["null", "string", "number", "object"]})
-            )
-            for f in self.expose_fields
-        ]
+        parser_map = {
+            ".shp": self._peek_shapefile,
+            ".geojson": self._peek_geojson,
+            ".json": self._peek_geojson,
+            ".gpx": self._peek_gpx,
+            ".osm": self._peek_osm,
+            ".pbf": self._peek_osm,
+        }
 
-        if suffix in (".osm", ".pbf"):
-            osm_props = [
-                th.Property(
-                    "id", th.CustomType({"type": ["null", "string", "number"]})
-                ),
-                th.Property("type", th.StringType(nullable=True)),
-                th.Property(
-                    "members", th.ArrayType(th.ObjectType(additional_properties=True))
-                ),
+        parser = parser_map.get(suffix)
+        if not parser:
+            raise ValueError(f"Unsupported file type for schema: {suffix}")
+
+        first_record = next(parser(storage, test_path), None)
+        if not first_record:
+            raise ValueError(f"No records found for schema inference: {test_path}")
+
+        properties: list[th.Property] = []
+
+        for k, v in first_record.items():
+            if k in (SDC_INCREMENTAL_KEY, SDC_FILENAME):
+                continue
+
+            # --- Explicit type detection order (list first)
+            if isinstance(v, list):
+                # Infer element type if possible
+                elem_type = None
+                for elem in v:
+                    if elem is None:
+                        continue
+                    if isinstance(elem, (int, float)):
+                        elem_type = th.NumberType(nullable=True)
+                    elif isinstance(elem, str):
+                        elem_type = th.StringType(nullable=True)
+                    elif isinstance(elem, dict):
+                        elem_type = th.ObjectType(
+                            additional_properties=True, nullable=True
+                        )
+                    else:
+                        elem_type = th.CustomType(
+                            {"type": ["null", "string", "object", "number"]}
+                        )
+                    break
+                if elem_type is None:
+                    elem_type = th.CustomType(
+                        {"type": ["null", "string", "object", "number"]}
+                    )
+                tpe = th.ArrayType(elem_type)
+
+            elif isinstance(v, (int, float)):
+                tpe = th.NumberType(nullable=True)
+
+            elif isinstance(v, str):
+                tpe = th.StringType(nullable=True)
+
+            elif isinstance(v, dict):
+                tpe = th.ObjectType(additional_properties=True, nullable=True)
+
+            else:
+                # Generic fallback type: allow arrays too, to prevent schema rejection
+                tpe = th.CustomType(
+                    {"type": ["null", "string", "object", "number", "array"]}
+                )
+
+            properties.append(th.Property(k, tpe))
+
+        # Always include incremental + filename keys
+        properties.extend(
+            [
+                th.Property(SDC_INCREMENTAL_KEY, th.DateTimeType(nullable=True)),
+                th.Property(SDC_FILENAME, th.StringType(nullable=True)),
             ]
-            return th.PropertiesList(*extras, *osm_props, *base_props).to_dict()
+        )
+        return th.PropertiesList(*properties).to_dict()
 
-        # Try opening via Fiona (using local or staged copy)
-        with self.staged_local_file(storage, test_path) as local_file:
-            with fiona.open(local_file):
-                pass
-
-        return th.PropertiesList(*extras, *base_props).to_dict()
-
-    # ------------------------------
+    # -------------------------------------------------------------------------
     # Record iteration
-    # ------------------------------
+    # -------------------------------------------------------------------------
     def get_records(self, context: Context | None) -> t.Iterable[dict]:
         """Iterate through all files in configured storages."""
         skip_fields = set(self.tap.config.get("skip_fields", []))
@@ -189,12 +222,23 @@ class GeoStream(Stream):
 
                 suffix = Path(info.path).suffix.lower()
                 try:
-                    if suffix in (".osm", ".pbf"):
-                        yield from self._parse_osm(st, info.path, geom_fmt, info.mtime)
-                    else:
-                        yield from self._parse_with_fiona(
+                    if suffix == ".shp":
+                        yield from self._parse_shapefile(
                             st, info.path, skip_fields, geom_fmt, info.mtime
                         )
+                    elif suffix in (".geojson", ".json"):
+                        yield from self._parse_geojson(
+                            st, info.path, skip_fields, geom_fmt, info.mtime
+                        )
+                    elif suffix == ".gpx":
+                        yield from self._parse_gpx(st, info.path, geom_fmt, info.mtime)
+                    elif suffix in (".osm", ".pbf"):
+                        yield from self._parse_osm(st, info.path, geom_fmt, info.mtime)
+                    else:
+                        self.logger.warning(
+                            "Skipping unsupported file suffix %s", suffix
+                        )
+                        continue
 
                     self._increment_stream_state(
                         {SDC_INCREMENTAL_KEY: info.mtime.isoformat()},
@@ -204,63 +248,123 @@ class GeoStream(Stream):
                     self.logger.exception("Failed parsing file %s: %s", info.path, e)
                     raise
 
-    # ------------------------------
-    # Parsing logic
-    # ------------------------------
-    def _parse_with_fiona(
-        self,
-        st: Storage,
-        path: str,
-        skip_fields: set[str],
-        geom_fmt: str,
-        mtime: datetime,
-    ) -> t.Iterable[dict]:
-        """Parse SHP, GeoJSON, GPKG via Fiona, staging remote datasets if needed."""
-        with self.staged_local_file(st, path) as local_file:
-            with fiona.open(local_file) as src:
-                crs = src.crs_wkt or src.crs
-                driver = src.driver
-                for feat in src:
-                    props = {
-                        k: v
-                        for k, v in feat["properties"].items()
-                        if k not in skip_fields
-                    }
-                    props_map = {k.lower(): k for k in props}
-                    exposed = {
-                        k.lower(): props.pop(props_map[k.lower()])
-                        for k in self.expose_fields
-                        if k.lower() in props_map and k.lower() not in self.core_fields
-                    }
+    # -------------------------------------------------------------------------
+    # Parsers
+    # -------------------------------------------------------------------------
+    def _parse_shapefile(self, st, path, skip_fields, geom_fmt, mtime):
+        with self._staged_local_file(st, path) as local:
+            reader = shapefile.Reader(local)
+            fields = reader.fields[1:]
+            field_names = [f[0].lower() for f in fields]
 
-                    geom = None
-                    if feat.get("geometry"):
-                        geom = (
-                            to_wkt(shape(feat["geometry"]))
-                            if geom_fmt == "wkt"
-                            else mapping(shape(feat["geometry"]))
-                        )
+            for sr in reader.iterShapeRecords():
+                geom = shapely.geometry.shape(sr.shape.__geo_interface__)
+                geom_out = to_wkt(geom) if geom_fmt == "wkt" else geom.__geo_interface__
+                props = {
+                    field_names[i]: sr.record[i]
+                    for i in range(len(field_names))
+                    if field_names[i] not in skip_fields
+                }
+                exposed = {
+                    k: props.pop(k) for k in list(self.expose_fields) if k in props
+                }
+                yield {
+                    **exposed,
+                    "geometry": geom_out,
+                    "features": props,
+                    "metadata": {"source": path, "driver": "shapefile"},
+                    SDC_INCREMENTAL_KEY: mtime,
+                    SDC_FILENAME: os.path.basename(path),
+                }
 
+    def _peek_shapefile(self, st, path):
+        yield from self._parse_shapefile(
+            st, path, set(), "wkt", datetime.now(timezone.utc)
+        )
+
+    def _parse_geojson(self, st, path, skip_fields, geom_fmt, mtime):
+        with self._staged_local_file(st, path) as local:
+            with open(local, "r", encoding="utf-8") as jf:
+                gj = json.load(jf)
+
+            features = gj.get("features") if "features" in gj else [gj]
+            for feat in features:
+                geom_obj = shapely.geometry.shape(feat["geometry"])
+                geom_out = to_wkt(geom_obj) if geom_fmt == "wkt" else feat["geometry"]
+                props = {
+                    k.lower(): v
+                    for k, v in (feat.get("properties") or {}).items()
+                    if k.lower() not in skip_fields
+                }
+                exposed = {
+                    k: props.pop(k) for k in list(self.expose_fields) if k in props
+                }
+                yield {
+                    **exposed,
+                    "geometry": geom_out,
+                    "features": props,
+                    "metadata": {"source": path, "driver": "geojson"},
+                    SDC_INCREMENTAL_KEY: mtime,
+                    SDC_FILENAME: os.path.basename(path),
+                }
+
+    def _peek_geojson(self, st, path):
+        yield from self._parse_geojson(
+            st, path, set(), "wkt", datetime.now(timezone.utc)
+        )
+
+    def _parse_gpx(self, st, path, geom_fmt, mtime):
+        with self._staged_local_file(st, path) as local:
+            with open(local, "r", encoding="utf-8") as gf:
+                gpx = gpxpy.parse(gf)
+
+            for wp in gpx.waypoints:
+                geom_obj = shapely.geometry.Point(wp.longitude, wp.latitude)
+                geom_out = (
+                    to_wkt(geom_obj)
+                    if geom_fmt == "wkt"
+                    else geom_obj.__geo_interface__
+                )
+                yield {
+                    "geometry": geom_out,
+                    "features": {
+                        "name": wp.name,
+                        "elevation": wp.elevation,
+                        "time": wp.time.isoformat() if wp.time else None,
+                    },
+                    "metadata": {"source": path, "driver": "gpx_waypoint"},
+                    SDC_INCREMENTAL_KEY: mtime,
+                    SDC_FILENAME: os.path.basename(path),
+                }
+
+            for track in gpx.tracks:
+                for segment in track.segments:
+                    coords = [(pt.longitude, pt.latitude) for pt in segment.points]
+                    geom_obj = shapely.geometry.LineString(coords)
+                    geom_out = (
+                        to_wkt(geom_obj)
+                        if geom_fmt == "wkt"
+                        else geom_obj.__geo_interface__
+                    )
                     yield {
-                        **exposed,
-                        "geometry": geom,
-                        "features": props,
-                        "metadata": {"source": path, "driver": driver, "crs": crs},
+                        "geometry": geom_out,
+                        "features": {
+                            "name": track.name,
+                            "segment_index": getattr(segment, "index", None),
+                            "elevations": [pt.elevation for pt in segment.points],
+                        },
+                        "metadata": {"source": path, "driver": "gpx_track"},
                         SDC_INCREMENTAL_KEY: mtime,
                         SDC_FILENAME: os.path.basename(path),
                     }
 
-    def _parse_osm(
-        self,
-        st: Storage,
-        path: str,
-        geom_fmt: str,
-        mtime: datetime,
-    ) -> t.Iterable[dict]:
-        """Parse OSM XML or PBF via pyosmium (temp file if remote)."""
-        with self.staged_local_file(st, path) as local_file:
+    def _peek_gpx(self, st, path):
+        yield from self._parse_gpx(st, path, "wkt", datetime.now(timezone.utc))
+
+    def _parse_osm(self, st, path, geom_fmt, mtime):
+        with self._staged_local_file(st, path) as local:
             handler = OSMHandler(geom_fmt)
-            handler.apply_file(local_file)
+            handler.apply_file(local)
             for rec in handler.records:
                 metadata = {"source": path}
                 tags = rec.pop("tags", {}) or {}
@@ -281,3 +385,6 @@ class GeoStream(Stream):
                     SDC_INCREMENTAL_KEY: mtime,
                     SDC_FILENAME: os.path.basename(path),
                 }
+
+    def _peek_osm(self, st, path):
+        yield from self._parse_osm(st, path, "wkt", datetime.now(timezone.utc))
