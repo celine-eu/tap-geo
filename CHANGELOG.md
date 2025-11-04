@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v0.1.1 (2025-11-04)
+
+### Chores
+
+- Force update
+  ([`549150e`](https://github.com/celine-eu/tap-geo/commit/549150e9d863d9dcf84090c300bf7ea22362320d))
+
+- Force update
+  ([`b2c2592`](https://github.com/celine-eu/tap-geo/commit/b2c259236f056762f18e24ec1a81c4a44fd2423a))
+
+
 ## v0.1.0 (2025-11-04)
 
 ### Bug Fixes
