@@ -110,8 +110,6 @@ Example:
 `S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin S3_ENDPOINT_URL=http://localhost:19000 meltano run tap-geo target-jsonl`
 
 
-
-
 ### Configure using environment variables
 
 This Singer tap will automatically import any environment variables within the working directory's
