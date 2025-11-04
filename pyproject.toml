@@ -1,6 +1,6 @@
 [project]
 name = "tap-geo"
-version = "0.0.0"
+version = "0.1.0"
 description = "Singer tap for Geo, built with the Meltano Singer SDK."
 readme = "README.md"
 authors = [{ name = "Luca Capra", email = "luca.capra@spindox.it" }]
