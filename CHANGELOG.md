@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.1.2 (2025-11-04)
+
+### Chores
+
+- Force uv sync if outdated in CI
+  ([`6967ed1`](https://github.com/celine-eu/tap-geo/commit/6967ed1ce100d8ce4862fdf8a1c986bb249c42dd))
+
+
 ## v0.1.1 (2025-11-04)
 
 ### Chores
