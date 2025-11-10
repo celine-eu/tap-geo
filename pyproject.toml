@@ -28,7 +28,7 @@ dependencies = [
     "pyshp",
     "s3fs>=2025.9.0",
     "shapely>=2.1.1",
-    "singer-sdk~=0.49.1",
+    "singer-sdk>=0.49.1,<0.53.0",
 ]
 
 [project.optional-dependencies]
