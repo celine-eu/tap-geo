@@ -25,18 +25,6 @@ wheels = [
 ]
 
 [[package]]
-name = "aiodocker"
-version = "0.24.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aiohttp" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f2/d7/30104dfac550ae6570d4dce24c2cbf2ddefd4937c9e861641314abfd8abb/aiodocker-0.24.0.tar.gz", hash = "sha256:661a6f9a479951f11f793031dcd5d55337e232c4ceaee69d51ceb885e5f16fac", size = 135482, upload-time = "2024-11-21T02:23:59.642Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0c/5b/2bb8b632041e314a0a917ade80382ca6a8f331f12c7eb409e59cd0485cc9/aiodocker-0.24.0-py3-none-any.whl", hash = "sha256:2199b7b01f8ce68f9cabab7910ecb26192f6f3494163f1ccffe527b4c3875689", size = 34849, upload-time = "2024-11-21T02:23:58.053Z" },
-]
-
-[[package]]
 name = "aiohappyeyeballs"
 version = "2.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -513,18 +501,6 @@ wheels = [
 ]
 
 [[package]]
-name = "flatten-dict"
-version = "0.4.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "six" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/89/c6/5fe21639369f2ea609c964e20870b5c6c98a134ef12af848a7776ddbabe3/flatten-dict-0.4.2.tar.gz", hash = "sha256:506a96b6e6f805b81ae46a0f9f31290beb5fa79ded9d80dbe1b7fa236ab43076", size = 10362, upload-time = "2021-08-08T09:56:51.455Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/43/f5/ee39c6e92acc742c052f137b47c210cd0a1b72dcd3f98495528bb4d27761/flatten_dict-0.4.2-py2.py3-none-any.whl", hash = "sha256:7e245b20c4c718981212210eec4284a330c9f713e632e98765560e05421e48ad", size = 9656, upload-time = "2021-08-08T09:56:54.313Z" },
-]
-
-[[package]]
 name = "frozenlist"
 version = "1.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -931,10 +907,9 @@ wheels = [
 
 [[package]]
 name = "meltano"
-version = "3.9.1"
+version = "4.0.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "aiodocker" },
     { name = "alembic" },
     { name = "anyio" },
     { name = "backports-strenum", marker = "python_full_version < '3.11'" },
@@ -944,12 +919,12 @@ dependencies = [
     { name = "click-didyoumean" },
     { name = "dateparser" },
     { name = "fasteners" },
-    { name = "flatten-dict" },
     { name = "importlib-metadata", marker = "python_full_version < '3.12'" },
     { name = "jinja2" },
     { name = "jsonschema" },
     { name = "packaging" },
     { name = "pip" },
+    { name = "platformdirs" },
     { name = "psutil" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
@@ -966,9 +941,9 @@ dependencies = [
     { name = "uv" },
     { name = "virtualenv" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/38/40/da9a51dfff64e0fe6aea07447d285a0cf50a7dfef3993dae044184a83c60/meltano-3.9.1.tar.gz", hash = "sha256:95ec26149b4e1c6696e53cdbe5c62c9af665aa6308bbb4c43534819775249da9", size = 12709912, upload-time = "2025-08-08T23:37:07.858Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/36/0f/0615df3aad26e5235dd16bd2197f29be830e0ee0234eb9ef1e9be15cf9cf/meltano-4.0.5.tar.gz", hash = "sha256:b3cba5b655f568052100dc82641ca8f6fa86ec786f55b5bc5e9d467a6aacc1f1", size = 12758948, upload-time = "2025-11-04T15:32:53.995Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/16/8a/83240f3528195426c29c6582f7249826708256f7333f9a658617caf7c921/meltano-3.9.1-py3-none-any.whl", hash = "sha256:ef3009043544b11d5e4c6ab58bb459f46ecb23b1b16df8f641ff993d9560ce26", size = 370825, upload-time = "2025-08-08T23:37:05.643Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/25/719a88d917303ccacaeb12af8f849c31b49b71da589125b5654684212de9/meltano-4.0.5-py3-none-any.whl", hash = "sha256:93dcfd369499863094ab68d48424ef20e70dd2c8f45a470501a783294eb3856d", size = 394427, upload-time = "2025-11-04T15:32:51.829Z" },
 ]
 
 [[package]]
@@ -2490,7 +2465,7 @@ wheels = [
 
 [[package]]
 name = "tap-geo"
-version = "0.1.0"
+version = "0.1.2"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
