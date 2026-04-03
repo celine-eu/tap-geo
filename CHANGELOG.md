@@ -1,6 +1,150 @@
 # CHANGELOG
 
 
+## v0.2.2 (2026-04-03)
+
+### Bug Fixes
+
+- Update lock refs
+  ([`5df146b`](https://github.com/celine-eu/tap-geo/commit/5df146b2e47566db552008efc5e68398bf76900d))
+
+### Chores
+
+- Keep uv lock
+  ([`5e8367f`](https://github.com/celine-eu/tap-geo/commit/5e8367fdc93db153cc792944cbd9122b48142a63))
+
+- **deps**: Bump boto3 from 1.39.11 to 1.40.69
+  ([`58937fa`](https://github.com/celine-eu/tap-geo/commit/58937fa9e53cd49d90b85d16dd4619c903436436))
+
+Bumps [boto3](https://github.com/boto/boto3) from 1.39.11 to 1.40.69. - [Release
+  notes](https://github.com/boto/boto3/releases) -
+  [Commits](https://github.com/boto/boto3/compare/1.39.11...1.40.69)
+
+--- updated-dependencies: - dependency-name: boto3 dependency-version: 1.40.69
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump meltano from 3.9.1 to 4.0.5
+  ([`4e7a7eb`](https://github.com/celine-eu/tap-geo/commit/4e7a7eb6ba6f4b981ad81dd6af6848f24a08e998))
+
+Bumps [meltano](https://github.com/meltano/meltano) from 3.9.1 to 4.0.5. - [Release
+  notes](https://github.com/meltano/meltano/releases) -
+  [Changelog](https://github.com/meltano/meltano/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/meltano/meltano/compare/v3.9.1...v4.0.5)
+
+--- updated-dependencies: - dependency-name: meltano dependency-version: 4.0.5
+
+dependency-type: direct:production
+
+update-type: version-update:semver-major ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump pytest from 8.4.2 to 9.0.0
+  ([`8dcdfb8`](https://github.com/celine-eu/tap-geo/commit/8dcdfb869bd6459d94e054d5b9b44ddfed163b3d))
+
+Bumps [pytest](https://github.com/pytest-dev/pytest) from 8.4.2 to 9.0.0. - [Release
+  notes](https://github.com/pytest-dev/pytest/releases) -
+  [Changelog](https://github.com/pytest-dev/pytest/blob/main/CHANGELOG.rst) -
+  [Commits](https://github.com/pytest-dev/pytest/compare/8.4.2...9.0.0)
+
+--- updated-dependencies: - dependency-name: pytest dependency-version: 9.0.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-major ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump python-semantic-release from 9.21.1 to 10.5.0
+  ([`b8c5c72`](https://github.com/celine-eu/tap-geo/commit/b8c5c72d396d73ae4e6a92041c94c7d6c894c86d))
+
+Bumps [python-semantic-release](https://github.com/python-semantic-release/python-semantic-release)
+  from 9.21.1 to 10.5.0. - [Release
+  notes](https://github.com/python-semantic-release/python-semantic-release/releases) -
+  [Changelog](https://github.com/python-semantic-release/python-semantic-release/blob/master/CHANGELOG.rst)
+  -
+  [Commits](https://github.com/python-semantic-release/python-semantic-release/compare/v9.21.1...v10.5)
+
+--- updated-dependencies: - dependency-name: python-semantic-release dependency-version: 10.5.0
+
+dependency-type: direct:production
+
+update-type: version-update:semver-major ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+- **deps**: Bump singer-sdk from 0.49.1 to 0.52.5
+  ([`053cc45`](https://github.com/celine-eu/tap-geo/commit/053cc4545e95e658327a01f26ce4f8fa5d10f100))
+
+Bumps [singer-sdk](https://github.com/meltano/sdk) from 0.49.1 to 0.52.5. - [Release
+  notes](https://github.com/meltano/sdk/releases) -
+  [Changelog](https://github.com/meltano/sdk/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/meltano/sdk/compare/v0.49.1...v0.52.5)
+
+--- updated-dependencies: - dependency-name: singer-sdk dependency-version: 0.52.5
+
+dependency-type: direct:production
+
+update-type: version-update:semver-minor ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+### Continuous Integration
+
+- Bump the actions group across 1 directory with 4 updates
+  ([`963f0b9`](https://github.com/celine-eu/tap-geo/commit/963f0b9254c222f7f90df6b9a40a3e815aa3f9a4))
+
+Bumps the actions group with 4 updates in the / directory:
+  [actions/checkout](https://github.com/actions/checkout),
+  [actions/download-artifact](https://github.com/actions/download-artifact),
+  [actions/setup-python](https://github.com/actions/setup-python) and
+  [astral-sh/setup-uv](https://github.com/astral-sh/setup-uv).
+
+Updates `actions/checkout` from 5.0.0 to 6.0.1 - [Release
+  notes](https://github.com/actions/checkout/releases) -
+  [Changelog](https://github.com/actions/checkout/blob/main/CHANGELOG.md) -
+  [Commits](https://github.com/actions/checkout/compare/08c6903cd8c0fde910a37f88322edcfb5dd907a8...8e8c483db84b4bee98b60c0593521ed34d9990e8)
+
+Updates `actions/download-artifact` from 6.0.0 to 7.0.0 - [Release
+  notes](https://github.com/actions/download-artifact/releases) -
+  [Commits](https://github.com/actions/download-artifact/compare/018cc2cf5baa6db3ef3c5f8a56943fffe632ef53...37930b1c2abaa49bbe596cd826c3c89aef350131)
+
+Updates `actions/setup-python` from 6.0.0 to 6.1.0 - [Release
+  notes](https://github.com/actions/setup-python/releases) -
+  [Commits](https://github.com/actions/setup-python/compare/e797f83bcb11b83ae66e0230d6156d7c80228e7c...83679a892e2d95755f2dac6acb0bfd1e9ac5d548)
+
+Updates `astral-sh/setup-uv` from 7.1.2 to 7.1.6 - [Release
+  notes](https://github.com/astral-sh/setup-uv/releases) -
+  [Commits](https://github.com/astral-sh/setup-uv/compare/85856786d1ce8acfbcc2f13a5f3fbd6b938f9f41...681c641aba71e4a1c380be3ab5e12ad51f415867)
+
+--- updated-dependencies: - dependency-name: actions/checkout dependency-version: 6.0.1
+
+dependency-type: direct:production
+
+update-type: version-update:semver-major
+
+dependency-group: actions
+
+- dependency-name: actions/download-artifact dependency-version: 7.0.0
+
+- dependency-name: actions/setup-python dependency-version: 6.1.0
+
+update-type: version-update:semver-minor
+
+- dependency-name: astral-sh/setup-uv dependency-version: 7.1.6
+
+update-type: version-update:semver-patch
+
+dependency-group: actions ...
+
+Signed-off-by: dependabot[bot] <support@github.com>
+
+
 ## v0.2.1 (2026-04-03)
 
 ### Bug Fixes
