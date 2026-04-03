@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-04-03)
+
+### Bug Fixes
+
+- Keep fid as unique reference
+  ([`e801b7a`](https://github.com/celine-eu/tap-geo/commit/e801b7a17d6b70a5c6ad2a92f2c938a7f4dd34ad))
+
+
 ## v0.2.0 (2026-04-03)
 
 ### Features
