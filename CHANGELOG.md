@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-04-03)
+
+### Features
+
+- Add gpkg sqlite support
+  ([`b836070`](https://github.com/celine-eu/tap-geo/commit/b836070c1a9f17d1b1590cc5cec5e9d55b484add))
+
+
 ## v0.1.2 (2025-11-04)
 
 ### Chores
