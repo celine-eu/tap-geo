@@ -436,7 +436,7 @@ class GeoStream(Stream):
                     prop_cols = [
                         c["name"]
                         for c in cols
-                        if c["name"] != geom_col and c["name"] != "fid"
+                        if c["name"] != geom_col
                     ]
                     for row in conn.execute(
                         f"SELECT {geom_col}, {', '.join(prop_cols)} FROM {layer_name}"  # noqa: S608
