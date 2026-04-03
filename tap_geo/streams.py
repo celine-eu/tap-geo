@@ -1,15 +1,17 @@
-"""GeoStream base logic for geospatial file parsing (SHP, GeoJSON, GPX, OSM/PBF) with storage abstraction."""
+"""GeoStream base logic for geospatial file parsing (SHP, GeoJSON, GPX, OSM/PBF, GPKG) with storage abstraction."""
 
 from __future__ import annotations
 import typing as t
 import tempfile
 import os
 import json
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
 import shapely.geometry
 from shapely.wkt import dumps as to_wkt
+from shapely.wkb import loads as from_wkb
 import shapefile  # pyshp
 import gpxpy
 
@@ -29,7 +31,7 @@ SDC_FILENAME = "_sdc_filename"
 
 
 class GeoStream(Stream):
-    """Stream for geospatial files (SHP, GeoJSON, GPX, OSM/PBF) supporting fsspec storage."""
+    """Stream for geospatial files (SHP, GeoJSON, GPX, OSM/PBF, GPKG) supporting fsspec storage."""
 
     def __init__(self, tap: Tap, file_cfg: dict) -> None:
         self.file_cfg = file_cfg
@@ -121,6 +123,7 @@ class GeoStream(Stream):
             ".gpx": self._peek_gpx,
             ".osm": self._peek_osm,
             ".pbf": self._peek_osm,
+            ".gpkg": self._peek_gpkg,
         }
 
         parser = parser_map.get(suffix)
@@ -235,6 +238,10 @@ class GeoStream(Stream):
                         yield from self._parse_gpx(st, info.path, geom_fmt, info.mtime)
                     elif suffix in (".osm", ".pbf"):
                         yield from self._parse_osm(st, info.path, geom_fmt, info.mtime)
+                    elif suffix == ".gpkg":
+                        yield from self._parse_gpkg(
+                            st, info.path, skip_fields, geom_fmt, info.mtime
+                        )
                     else:
                         self.logger.warning(
                             "Skipping unsupported file suffix %s", suffix
@@ -389,3 +396,86 @@ class GeoStream(Stream):
 
     def _peek_osm(self, st, path):
         yield from self._parse_osm(st, path, "wkt", datetime.now(timezone.utc))
+
+    # -------------------------------------------------------------------------
+    # GeoPackage (.gpkg)
+    # -------------------------------------------------------------------------
+    @staticmethod
+    def _gpkg_wkb_to_geom(blob: bytes) -> shapely.geometry.base.BaseGeometry | None:
+        """Parse a GPKG geometry blob (GPKG header + WKB) into a Shapely geometry."""
+        if not blob or len(blob) < 8:
+            return None
+        # Magic bytes check
+        if blob[0:2] != b"GP":
+            return None
+        flags = blob[3]
+        little_endian = bool(flags & 0x01)
+        envelope_type = (flags >> 1) & 0x07
+        is_empty = bool((flags >> 4) & 0x01)
+        if is_empty:
+            return None
+        # Envelope sizes: 0=none, 1=XY(32B), 2=XYZ(48B), 3=XYM(48B), 4=XYZM(64B)
+        envelope_sizes = {0: 0, 1: 32, 2: 48, 3: 48, 4: 64}
+        envelope_bytes = envelope_sizes.get(envelope_type, 0)
+        wkb_offset = 8 + envelope_bytes
+        wkb = blob[wkb_offset:]
+        return from_wkb(wkb)
+
+    def _parse_gpkg(self, st, path, skip_fields, geom_fmt, mtime):
+        with self._staged_local_file(st, path) as local:
+            conn = sqlite3.connect(local)
+            conn.row_factory = sqlite3.Row
+            try:
+                layers = conn.execute(
+                    "SELECT table_name, column_name FROM gpkg_geometry_columns"
+                ).fetchall()
+                for layer_name, geom_col in layers:
+                    cols = conn.execute(
+                        f"PRAGMA table_info({layer_name})"  # noqa: S608
+                    ).fetchall()
+                    prop_cols = [
+                        c["name"]
+                        for c in cols
+                        if c["name"] != geom_col and c["name"] != "fid"
+                    ]
+                    for row in conn.execute(
+                        f"SELECT {geom_col}, {', '.join(prop_cols)} FROM {layer_name}"  # noqa: S608
+                    ):
+                        geom_blob = row[0]
+                        geom_obj = self._gpkg_wkb_to_geom(geom_blob)
+                        if geom_obj is None:
+                            continue
+                        geom_out = (
+                            to_wkt(geom_obj)
+                            if geom_fmt == "wkt"
+                            else geom_obj.__geo_interface__
+                        )
+                        props = {
+                            c.lower(): row[c]
+                            for c in prop_cols
+                            if c.lower() not in skip_fields
+                        }
+                        exposed = {
+                            k: props.pop(k)
+                            for k in list(self.expose_fields)
+                            if k in props
+                        }
+                        yield {
+                            **exposed,
+                            "geometry": geom_out,
+                            "features": props,
+                            "metadata": {
+                                "source": path,
+                                "driver": "gpkg",
+                                "layer": layer_name,
+                            },
+                            SDC_INCREMENTAL_KEY: mtime,
+                            SDC_FILENAME: os.path.basename(path),
+                        }
+            finally:
+                conn.close()
+
+    def _peek_gpkg(self, st, path):
+        yield from self._parse_gpkg(
+            st, path, set(), "wkt", datetime.now(timezone.utc)
+        )
