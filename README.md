@@ -67,6 +67,7 @@ Provide a list of `files` with those fields
 `table_name` name of the destination table, default to filename
 `primary_keys` list of columns to use as primary keys
 `geometry_format` store geospatial information in "wkt" (default) or "geojson"
+`bbox` optional bounding box filter `[west, south, east, north]`
 
 #### Example config
 
@@ -97,13 +98,38 @@ config:
         - "s3://local-data/buildings.geojson"
       table_name: buildings
       primary_keys: ["building_id"]
+
+    # GeoParquet with bbox filter (e.g. Overture Maps buildings)
+    - paths:
+        - "s3://overturemaps-us-west-2/release/2026-05-20.0/theme=buildings/type=building/*"
+      table_name: overture_buildings
+      bbox: [-117.06, 32.58, -117.04, 32.59]
+      geometry_format: wkt
 ```
 
+### Supported Formats
 
-To use an S3-based storage ensure to provide those envirnoment variables: 
+| Format | Extensions | Bbox Behavior |
+|:-------|:-----------|:-------------|
+| Shapefile | `.shp` | Post-parse spatial filter |
+| GeoJSON | `.geojson`, `.json` | Post-parse spatial filter |
+| GPX | `.gpx` | Post-parse spatial filter |
+| OSM/PBF | `.osm`, `.pbf` | Post-parse spatial filter |
+| GeoPackage | `.gpkg` | Post-parse spatial filter |
+| GeoParquet | `.parquet`, `.geoparquet` | Predicate pushdown (row-group pruning) |
+
+### Bounding Box Filter
+
+The `bbox` parameter accepts `[west, south, east, north]` coordinates. For GeoParquet files, the filter is applied as predicate pushdown — only row groups intersecting the bbox are downloaded. For all other formats, records are filtered post-parse via geometry intersection.
+
+### S3 Storage
+
+To use an S3-based storage, provide these environment variables:
 
 - `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` access key/secret pair
 - `S3_ENDPOINT_URL` Custom S3 endpoint such as minio or compatible interface
+
+For public S3 buckets (e.g. Overture Maps), no credentials are needed — anonymous access is used automatically when the environment variables above are not set.
 
 Example:
 

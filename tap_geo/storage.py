@@ -24,14 +24,20 @@ class Storage:
     def __init__(self, path_glob: str, protocol: str | None = None) -> None:
         self.path_glob = path_glob
         # Ensure fsspec knows how to reach MinIO/S3
+        storage_options: dict[str, t.Any] = {}
         if path_glob.startswith("s3://"):
-            storage_options = {
-                "key": os.getenv("S3_ACCESS_KEY_ID", None),
-                "secret": os.getenv("S3_SECRET_ACCESS_KEY", None),
-                "client_kwargs": {"endpoint_url": os.getenv("S3_ENDPOINT_URL", None)},
-            }
-        else:
-            storage_options = {}
+            key = os.getenv("S3_ACCESS_KEY_ID")
+            secret = os.getenv("S3_SECRET_ACCESS_KEY")
+            if key and secret:
+                storage_options = {
+                    "key": key,
+                    "secret": secret,
+                    "client_kwargs": {
+                        "endpoint_url": os.getenv("S3_ENDPOINT_URL"),
+                    },
+                }
+            else:
+                storage_options = {"anon": True}
 
         self.fs, _ = url_to_fs(path_glob, **storage_options)
 
