@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-05-28)
+
+### Features
+
+- Add support for geoparquet and oveerturemaps
+  ([`5135dbc`](https://github.com/celine-eu/tap-geo/commit/5135dbc6f2a30e30dbcb93240fe98cc93ac852bb))
+
+
 ## v0.2.2 (2026-04-03)
 
 ### Bug Fixes
