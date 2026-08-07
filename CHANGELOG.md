@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.3.1 (2026-08-07)
+
+### Bug Fixes
+
+- Infer boolean schema type for boolean feature properties
+  ([`6656da6`](https://github.com/celine-eu/tap-geo/commit/6656da67dd560088206d4941b309100f0ff29c08))
+
+
 ## v0.3.0 (2026-05-28)
 
 ### Features
