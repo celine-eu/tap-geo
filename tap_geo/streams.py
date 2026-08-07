@@ -238,7 +238,10 @@ class GeoStream(Stream):
                 for elem in v:
                     if elem is None:
                         continue
-                    if isinstance(elem, (int, float)):
+                    # bool must be checked before int/float: bool is a subclass of int
+                    if isinstance(elem, bool):
+                        elem_type = th.BooleanType(nullable=True)
+                    elif isinstance(elem, (int, float)):
                         elem_type = th.NumberType(nullable=True)
                     elif isinstance(elem, str):
                         elem_type = th.StringType(nullable=True)
@@ -248,14 +251,18 @@ class GeoStream(Stream):
                         )
                     else:
                         elem_type = th.CustomType(
-                            {"type": ["null", "string", "object", "number"]}
+                            {"type": ["null", "string", "object", "number", "boolean"]}
                         )
                     break
                 if elem_type is None:
                     elem_type = th.CustomType(
-                        {"type": ["null", "string", "object", "number"]}
+                        {"type": ["null", "string", "object", "number", "boolean"]}
                     )
                 tpe = th.ArrayType(elem_type)
+
+            # bool must be checked before int/float: bool is a subclass of int
+            elif isinstance(v, bool):
+                tpe = th.BooleanType(nullable=True)
 
             elif isinstance(v, (int, float)):
                 tpe = th.NumberType(nullable=True)
@@ -269,7 +276,7 @@ class GeoStream(Stream):
             else:
                 # Generic fallback type: allow arrays too, to prevent schema rejection
                 tpe = th.CustomType(
-                    {"type": ["null", "string", "object", "number", "array"]}
+                    {"type": ["null", "string", "object", "number", "array", "boolean"]}
                 )
 
             properties.append(th.Property(k, tpe))

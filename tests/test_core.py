@@ -1,3 +1,4 @@
+import json
 import os
 import pytest
 from tap_geo.tap import TapGeo
@@ -140,3 +141,56 @@ class TestBboxFiltering:
             assert "name" in rec
             # 'name' should NOT be in features
             assert "name" not in rec["features"]
+
+
+class TestSchemaBooleanInference:
+    """Boolean properties must be typed boolean, not number.
+
+    Python bool is a subclass of int, so a naive isinstance(v, (int, float))
+    check classifies True/False as numbers; target-postgres then rejects the
+    records ("True is not of type 'number'").
+    """
+
+    def _make_stream(self, tmp_path, records):
+        """Build a GeoStream over a temp GeoJSON with the given feature properties."""
+        fc = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "Point", "coordinates": [11.12, 46.07]},
+                    "properties": props,
+                }
+                for props in records
+            ],
+        }
+        path = tmp_path / "bools.geojson"
+        path.write_text(json.dumps(fc))
+        cfg = {
+            "paths": [str(path)],
+            "expose_fields": ["joint_id", "is_asphalt", "maybe_flag"],
+            "primary_keys": ["joint_id"],
+        }
+        tap = TapGeo(config={"files": [cfg]})
+        return GeoStream(tap, cfg)
+
+    def test_boolean_property_typed_boolean(self, tmp_path):
+        """A bool property in the first record must be typed boolean, not number."""
+        stream = self._make_stream(
+            tmp_path, [{"joint_id": 1, "is_asphalt": True, "maybe_flag": None}]
+        )
+        props = stream.schema["properties"]
+        assert "boolean" in props["is_asphalt"]["type"]
+        assert "number" not in props["is_asphalt"]["type"]
+
+    def test_null_first_record_fallback_accepts_boolean(self, tmp_path):
+        """A property that is null in the first record must still accept booleans."""
+        stream = self._make_stream(
+            tmp_path,
+            [
+                {"joint_id": 1, "is_asphalt": False, "maybe_flag": None},
+                {"joint_id": 2, "is_asphalt": True, "maybe_flag": True},
+            ],
+        )
+        props = stream.schema["properties"]
+        assert "boolean" in props["maybe_flag"]["type"]
